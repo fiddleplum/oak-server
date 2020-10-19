@@ -1,0 +1,16 @@
+{
+	"compilerOptions": {
+		"target": "ES2018",
+		"noImplicitAny": true,
+		"strictPropertyInitialization": true,
+		"strictNullChecks": true,
+		"noImplicitReturns": true,
+		"removeComments": true,
+		"preserveConstEnums": true,
+		"sourceMap": true,
+		"baseUrl": "src"
+	},
+	"include": [
+		"src/**/*"
+	]
+}

@@ -1,0 +1,33 @@
+{
+	"name": "@fiddleplum/cedar-desk-server",
+	"version": "1.0.0",
+	"description": "Cedar Desk Server",
+	"private": true,
+	"scripts": {
+		"setup": "yarn install --pure-lockfile",
+		"update": "yarn install",
+		"start": "tsc; node dist/"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/fiddleplum/cedar-desk-server.git"
+	},
+	"author": "Stephen Hurley",
+	"license": "ISC",
+	"bugs": {
+		"url": "https://github.com/fiddleplum/cedar-desk-server/issues"
+	},
+	"homepage": "https://github.com/fiddleplum/cedar-desk-server",
+	"dependencies": {
+		"ws": "latest"
+	},
+	"devDependencies": {
+		"eslint": "latest",
+		"@typescript-eslint/parser": "latest",
+		"@typescript-eslint/eslint-plugin": "latest",
+		"@types/node": "latest",
+		"@types/ws": "latest",
+		"ts-loader": "latest",
+		"typescript": "latest"
+	}
+}

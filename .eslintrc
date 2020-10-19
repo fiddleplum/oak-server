@@ -1,0 +1,48 @@
+{
+	"root": true,
+	"parser": "@typescript-eslint/parser",
+	"parserOptions": {
+		"project": "./tsconfig.json"
+	},
+	"plugins": [
+	  "@typescript-eslint"
+	],
+	"extends": [
+	  "eslint:recommended",
+	  "plugin:@typescript-eslint/eslint-recommended",
+	  "plugin:@typescript-eslint/recommended"
+	],
+	"rules": {
+		"brace-style": ["error", "stroustrup"],
+		"indent": ["error", "tab", { "SwitchCase": 1 }],
+		"no-multiple-empty-lines": ["error", {
+			"max": 1,
+			"maxEOF": 0,
+			"maxBOF": 0
+		}],
+		"no-constant-condition": "off",
+		"no-tabs": "off",
+		"no-trailing-spaces": "error",
+		"operator-linebreak": ["error", "before"],
+		"prefer-const": "error",
+		"quotes": ["error", "single", { "allowTemplateLiterals": true }],
+		"semi": ["error", "always"],
+		"space-before-function-paren": ["error", {
+			"anonymous": "always",
+			"asyncArrow": "always",
+			"named": "never"
+		}],
+		"yoda": "off",
+		"@typescript-eslint/explicit-function-return-type": ["error"],
+		"@typescript-eslint/no-empty-function": "off",
+		"@typescript-eslint/no-explicit-any": "off",
+		"@typescript-eslint/no-inferrable-types": "off",
+		"@typescript-eslint/no-namespace": "off",
+		"@typescript-eslint/no-non-null-assertion": "off",
+		"@typescript-eslint/no-this-alias": "off",
+		"@typescript-eslint/no-use-before-define": "off",
+		"@typescript-eslint/no-unused-vars": "off", // Turn this off so that the experimental one can be used.
+		"@typescript-eslint/no-unused-vars-experimental": "warn",
+		"@typescript-eslint/strict-boolean-expressions": ["error"]
+	}
+  }
