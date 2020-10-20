@@ -16,8 +16,8 @@ export interface Table {
 	/** Sort the data by this field. */
 	sortField: string;
 
-	/** Bin the records by this function, which is applied to the sortField. It will be eval'ed. */
-	binningFunction: string;
+	/** Bin the records by this function body, which uses the parameter sortField and returns a string. */
+	binningFunctionBody: string;
 }
 
 export interface Config {
