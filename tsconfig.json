@@ -10,7 +10,10 @@
 		"removeComments": true,
 		"preserveConstEnums": true,
 		"sourceMap": true,
-		"baseUrl": "src"
+		"baseUrl": "src",
+		"paths": {
+			"elm-app": [ "../../elm-app/src/index" ]
+		}
 	},
 	"include": [
 		"src/**/*"

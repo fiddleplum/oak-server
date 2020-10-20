@@ -1,23 +1,23 @@
 {
-	"name": "@fiddleplum/cedar-desk-server",
+	"name": "@fiddleplum/oak-server",
 	"version": "0.0.0",
-	"description": "Cedar Desk Server",
+	"description": "Oak Server",
 	"private": true,
 	"scripts": {
-		"setup": "yarn install; mkdir -p dist; cp src/config.example.js dist/config.js",
+		"setup": "yarn install",
 		"update": "yarn install --no-default-rc",
-		"start": "tsc; node dist/"
+		"start": "tsc; node dist/oak-server/src"
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/fiddleplum/cedar-desk-server.git"
+		"url": "git+https://github.com/fiddleplum/oak-server.git"
 	},
 	"author": "Stephen O'Rourley",
 	"license": "ISC",
 	"bugs": {
-		"url": "https://github.com/fiddleplum/cedar-desk-server/issues"
+		"url": "https://github.com/fiddleplum/oak-server/issues"
 	},
-	"homepage": "https://github.com/fiddleplum/cedar-desk-server",
+	"homepage": "https://github.com/fiddleplum/oak-server",
 	"dependencies": {
 		"ws": "latest"
 	},
