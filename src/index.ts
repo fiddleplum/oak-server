@@ -89,7 +89,7 @@ function startServer(): void {
 
 	// AccountUtils.initialize();
 
-	console.log('The server has started.');
+	console.log('The server has started on port 8081.');
 
 	wss.on('connection', (ws) => {
 		console.log('Accepted a new connection.');
