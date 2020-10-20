@@ -1,16 +1,31 @@
 import * as fs from 'fs';
 import * as WS from 'ws';
+import { Config } from './config';
+import { JSONType } from 'elm-app';
 
 /** Process a message from the client. */
 async function processMessage(ws: WS, message: string): Promise<void> {
-	const request = JSON.parse(message);
-	const requestData = request.data;
-	let responseData;
-	let success = false;
-	let error = '';
-	console.log('received: %s', JSON.stringify(requestData));
+	const request = JSON.parse(message) as JSONType;
+	if (typeof request !== 'object' || request === null || Array.isArray(request)) {
+		throw new Error('Invalid request is not an object.');
+	}
+	if (typeof request.id !== 'number') {
+		throw new Error('Invalid request with invalid or no id.');
+	}
+	if (request.json === undefined) {
+		throw new Error('Invalid request with no JSON data.');
+	}
+	const json = request.json;
+	console.log(json);
+	// const requestData = request.data;
+	// let responseData;
+	// let success = false;
+	// let error = '';
+	// console.log('received: %s', JSON.stringify(requestData));
 
 	try {
+		// if (requestData) {
+		// }
 		// if (requestData.command === 'list accounts') {
 		// 	responseData = AccountUtils.list();
 		// }
@@ -64,27 +79,44 @@ async function processMessage(ws: WS, message: string): Promise<void> {
 		// else {
 		// 	throw new Error('Unknown command.');
 		// }
-		success = true;
+		// success = true;
 	}
 	catch (e) {
 		console.log('Error: ' + e.message);
-		error = e.message;
+		// error = e.message;
 	}
-	ws.send(JSON.stringify({
-		id: request.id,
-		success: success,
-		error: error,
-		data: responseData
-	}));
+	// ws.send(JSON.stringify({
+	// 	id: request.id,
+	// 	success: success,
+	// 	error: error,
+	// 	data: responseData
+	// }));
 }
 
-function startServer(): void {
+function startServer(args: string[]): void {
+	// Get the command-line parameters.
+	if (args.length < 2) {
+		console.log('Usage: node . <config file path> <data folder path>.');
+		return;
+	}
+	const configFilePath = args[0];
+	const dataFolderPath = args[1];
+
+	// Get the config.
+	const configFileData = fs.readFileSync(configFilePath);
+	const config: Config = JSON.parse(configFileData.toString('utf-8'));
+
+	// Print the config.
+	console.log('The configuration is:');
+	console.log(config);
+
+	// Startup the WebSocket server.
 	const wss = new WS.Server({
 		port: 8081
 	});
 
-	if (!fs.existsSync('data/')) {
-		fs.mkdirSync('data/');
+	if (!fs.existsSync(dataFolderPath)) {
+		fs.mkdirSync(dataFolderPath);
 	}
 
 	// AccountUtils.initialize();
@@ -93,7 +125,7 @@ function startServer(): void {
 
 	wss.on('connection', (ws) => {
 		console.log('Accepted a new connection.');
-		ws.on('message', (message) => {
+		ws.on('message', (message: WS.Data) => {
 			processMessage(ws, message.toString());
 		});
 		ws.on('close', () => {
@@ -105,4 +137,6 @@ function startServer(): void {
 	});
 }
 
-startServer();
+const args = process.argv.slice(2);
+
+startServer(args);
