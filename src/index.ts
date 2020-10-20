@@ -1,15 +1,15 @@
-
 import * as fs from 'fs';
 import * as WS from 'ws';
 
 /** Process a message from the client. */
-async function processMessage(ws: WS, message: string) {
-	let request = JSON.parse(message);
-	let requestData = request.data;
+async function processMessage(ws: WS, message: string): Promise<void> {
+	const request = JSON.parse(message);
+	const requestData = request.data;
 	let responseData;
 	let success = false;
 	let error = '';
 	console.log('received: %s', JSON.stringify(requestData));
+
 	try {
 		// if (requestData.command === 'list accounts') {
 		// 	responseData = AccountUtils.list();
@@ -78,7 +78,7 @@ async function processMessage(ws: WS, message: string) {
 	}));
 }
 
-function startServer() {
+function startServer(): void {
 	const wss = new WS.Server({
 		port: 8081
 	});

@@ -1,18 +1,18 @@
 {
 	"name": "@fiddleplum/cedar-desk-server",
-	"version": "1.0.0",
+	"version": "0.0.0",
 	"description": "Cedar Desk Server",
 	"private": true,
 	"scripts": {
-		"setup": "yarn install --pure-lockfile",
-		"update": "yarn install",
+		"setup": "yarn install; mkdir -p dist; cp src/config.example.js dist/config.js",
+		"update": "yarn install --no-default-rc",
 		"start": "tsc; node dist/"
 	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/fiddleplum/cedar-desk-server.git"
 	},
-	"author": "Stephen Hurley",
+	"author": "Stephen O'Rourley",
 	"license": "ISC",
 	"bugs": {
 		"url": "https://github.com/fiddleplum/cedar-desk-server/issues"
