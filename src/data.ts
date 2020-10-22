@@ -34,22 +34,23 @@ export class Data {
 	}
 
 	/** Gets a data record. Accepts a callback that takes the data record when it is loaded. */
-	get(table: string, id: FieldType, callback: (dataRecord: DataRecord | undefined) => void): void {
-		this._getRecordIndex(table, id, false, (cache: Cache, index: number, found: boolean) => {
-			if (found) {
-				callback(cache.dataRecords[index]);
+	async get(table: string, id: FieldType): Promise<DataRecord> {
+		return this._getRecordIndex(table, id, false).then((result) => {
+			if (result.found) {
+				return result.cache.dataRecords[result.index];
 			}
 			else {
-				callback(undefined);
+				throw new Error(`Record "${id}" in table "${table}" not found.`);
 			}
 		});
 	}
 
 	/** Sets fields of a record. */
-	set(table: string, dataRecords: DataRecord[], callback: (error: string | undefined) => void): void {
+	async set(table: string, dataRecords: DataRecord[]): Promise<void[]> {
 		// Verify that the table exists.
 		if (this._config.tables[table] !== undefined) {
 			const tableConfig = this._config.tables[table];
+			const promises: Promise<void>[] = [];
 			// For each data record,
 			for (let i = 0, l = dataRecords.length; i < l; i++) {
 				const dataRecord = dataRecords[i];
@@ -63,69 +64,66 @@ export class Data {
 					}
 				}
 				const indexOfId = this._config.tables[table].indexOfId;
-				this._getRecordIndex(table, dataRecord[indexOfId], true, (cache: Cache, index: number, found: boolean) => {
-					console.log('Setting ' + dataRecords[indexOfId] + ' ' + found);
-					if (found) {
-						cache.dataRecords[index] = dataRecord;
+				promises.push(this._getRecordIndex(table, dataRecord[indexOfId], true).then((result) => {
+					console.log('Setting ' + dataRecords[indexOfId] + ' ' + result.found);
+					if (result.found) {
+						result.cache.dataRecords[result.index] = dataRecord;
 					}
 					else {
-						cache.dataRecords.splice(index, 0, dataRecord);
+						result.cache.dataRecords.splice(result.index, 0, dataRecord);
 					}
-					cache.dirty = true;
-				});
+					result.cache.dirty = true;
+				}));
 			}
+			return Promise.all(promises);
 		}
 		else {
-			callback(`Invalid table "${table}".`);
+			throw new Error(`Invalid table "${table}".`);
 		}
 	}
 
-	private delete(table: string, ids: FieldType[], callback: (error: string | undefined) => void): void {
+	async delete(table: string, ids: FieldType[]): Promise<void> {
 		// Verify that the table exists.
 		if (this._config.tables[table] !== undefined) {
 			// For each data record,
 			for (let i = 0, l = ids.length; i < l; i++) {
 				const id = ids[i];
-				this._getRecordIndex(table, id, true, (cache: Cache, index: number, found: boolean) => {
-					console.log('Deleting ' + id + ' ' + found);
-					if (found) {
-						cache.dataRecords.splice(index, 1);
-						cache.dirty = true;
+				return this._getRecordIndex(table, id, false).then((result) => {
+					console.log('Deleting ' + id + ' ' + result.found);
+					if (result.found) {
+						result.cache.dataRecords.splice(result.index, 1);
+						result.cache.dirty = true;
 					}
 				});
 			}
 		}
-		else {
-			callback(`Invalid table "${table}".`);
-		}
 	}
 
 	/** Gets the index in a cache where the record is. */
-	private _getRecordIndex(table: string, id: FieldType, createIfNotFound: boolean, callback: (cache: Cache | undefined, index: number, found: boolean) => void): void {
-		this._loadCache(table, id, createIfNotFound, (cache: Cache | undefined) => {
-			if (cache !== undefined) {
-				const indexOfId = this._config.tables[table].indexOfId;
-				let low = 0;
-				let high = cache.dataRecords.length;
-				while (low < high) {
-					const mid = (low + high) >>> 1;
-					if (cache.dataRecords[mid][indexOfId] < id) {
-						low = mid + 1;
-					}
-					else {
-						high = mid;
-					}
+	private async _getRecordIndex(table: string, id: FieldType, createIfNotFound: boolean): Promise<{ cache: Cache, index: number, found: boolean }> {
+		return this._loadCache(table, id, createIfNotFound).then((cache: Cache) => {
+			const indexOfId = this._config.tables[table].indexOfId;
+			let low = 0;
+			let high = cache.dataRecords.length;
+			while (low < high) {
+				const mid = (low + high) >>> 1;
+				if (cache.dataRecords[mid][indexOfId] < id) {
+					low = mid + 1;
 				}
-				callback(cache, low, cache.dataRecords[low][indexOfId] === id);
+				else {
+					high = mid;
+				}
 			}
-			else {
-				callback(undefined, 0, false);
-			}
+			return {
+				cache: cache,
+				index: low,
+				found: (cache.dataRecords[low][indexOfId] === id)
+			};
 		});
 	}
 
 	/** Loads a data file into the cache. Accepts a callback that takes the cache, when the cache is loaded. */
-	private _loadCache(table: string, id: FieldType, createIfNotFound: boolean, callback: (cache: Cache | undefined) => void): void {
+	private async _loadCache(table: string, id: FieldType, createIfNotFound: boolean): Promise<Cache> {
 		// Get the filename from the table and sort field.
 		const binningFunction = this._binningFunctions.get(table);
 		const filename = this._folder + '/' + table + '/' + (binningFunction ? binningFunction(id) : '');
@@ -134,45 +132,38 @@ export class Data {
 		// If the file is in the cache,
 		if (cache !== undefined) {
 			// And it is still loading,
-			if (cache.status === 'loading') {
-				// Add the callback to be called when it loads.
-				cache.loadingCallbacks.push(callback);
+			if (cache.loadingPromise !== undefined) {
+				// Return the loading promise.
+				return cache.loadingPromise;
 			}
 			// Otherwise it was loaded or failed,
 			else {
-				// Call the callback immediately.
-				callback(cache);
+				// Return a resolved promise.
+				return Promise.resolve(cache);
 			}
 		}
 		// Else the file isn't in the cache, so load it.
 		else {
 			// Create the new cache object.
 			const newCache = new Cache();
-			newCache.loadingCallbacks.push(callback);
-			this._caches.set(filename, newCache);
 			// Load the data into the cache.
 			console.log(`Loading into cache "${filename}".`);
-			fs.readFile(filename, (err: NodeJS.ErrnoException | null, data: Buffer) => {
+			return fs.promises.readFile(filename).then((data: Buffer) => {
 				// If it loaded correctly,
-				if (err === null) {
-					newCache.dataRecords = JSON.parse(data.toString('utf-8'));
+				this._caches.set(filename, newCache);
+				newCache.dataRecords = JSON.parse(data.toString('utf-8'));
+				newCache.lastSave = Date.now();
+				newCache.status = 'loaded';
+				return newCache;
+			}).catch((error: Error) => {
+				if (createIfNotFound) {
 					newCache.lastSave = Date.now();
 					newCache.status = 'loaded';
+					return newCache;
 				}
-				// If it failed loading,
 				else {
-					if (createIfNotFound) {
-						newCache.lastSave = Date.now();
-						newCache.status = 'loaded';
-					}
-					else {
-						console.log(`Could not load data file from cache. "${filename}". ${err.message}`);
-						newCache.status = 'failed';
-					}
-				}
-				// Call of the callbacks.
-				for (let i = 0, l = newCache.loadingCallbacks.length; i < l; i++) {
-					newCache.loadingCallbacks[i](newCache);
+					this._caches.delete(filename);
+					throw new Error(`Could not load data file from cache. "${filename}". ${error.message}`);
 				}
 			});
 		}
@@ -207,8 +198,11 @@ class Cache {
 	/** The status of the cache. */
 	status: 'loading' | 'loaded' | 'failed' = 'loading';
 
-	/** Callbacks to be called when the cache is loaded. */
-	loadingCallbacks: ((cache: Cache) => void)[] = [];
+	/** A promise that exists while the cache is loading. */
+	loadingPromise: Promise<Cache> | undefined = undefined;
+
+	// /** Callbacks to be called when the cache is loaded. */
+	// loadingCallbacks: ((cache: Cache) => void)[] = [];
 
 	/** The last time the cache was saved. */
 	lastSave: number = 0;

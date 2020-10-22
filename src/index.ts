@@ -32,14 +32,18 @@ async function processMessage(ws: WS, message: string): Promise<void> {
 			if (typeof json.table !== 'string' || !Array.isArray(json.dataRecords)) {
 				throw new Error('Invalid request JSON with invalid set command parameters.');
 			}
-			data.set(json.table, json.dataRecords as DataRecord[], (error: string | undefined) => {
+			data.set(json.table, json.dataRecords as DataRecord[]).then(() => {
 				ws.send(JSON.stringify({
 					id: request.id,
-					success: (error === undefined),
-					error: error
+					success: true
+				}));
+			}).catch((error: Error) => {
+				ws.send(JSON.stringify({
+					id: request.id,
+					success: false,
+					error: error.message
 				}));
 			});
-			// success = true;
 		}
 		else if (command === 'delete') {
 			// data.delete();
@@ -49,7 +53,7 @@ async function processMessage(ws: WS, message: string): Promise<void> {
 			if (typeof json.table !== 'string' || (typeof json.id !== 'number' && typeof json.id !== 'string' && typeof json.id !== 'boolean')) {
 				throw new Error('Invalid request JSON with invalid get command parameters.');
 			}
-			data.get(json.table, json.id, (dataRecord: DataRecord | undefined) => {
+			data.get(json.table, json.id).then((dataRecord: DataRecord) => {
 				if (dataRecord === undefined) {
 					ws.send(JSON.stringify({
 						id: request.id,
