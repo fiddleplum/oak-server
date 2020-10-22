@@ -80,6 +80,26 @@ export class Data {
 		}
 	}
 
+	private delete(table: string, ids: FieldType[], callback: (error: string | undefined) => void): void {
+		// Verify that the table exists.
+		if (this._config.tables[table] !== undefined) {
+			// For each data record,
+			for (let i = 0, l = ids.length; i < l; i++) {
+				const id = ids[i];
+				this._getRecordIndex(table, id, true, (cache: Cache, index: number, found: boolean) => {
+					console.log('Deleting ' + id + ' ' + found);
+					if (found) {
+						cache.dataRecords.splice(index, 1);
+						cache.dirty = true;
+					}
+				});
+			}
+		}
+		else {
+			callback(`Invalid table "${table}".`);
+		}
+	}
+
 	/** Gets the index in a cache where the record is. */
 	private _getRecordIndex(table: string, id: FieldType, createIfNotFound: boolean, callback: (cache: Cache | undefined, index: number, found: boolean) => void): void {
 		this._loadCache(table, id, createIfNotFound, (cache: Cache | undefined) => {
