@@ -1,3 +1,5 @@
+export type FieldType = number | string | boolean;
+
 export interface Field {
 	/** The name of the field. */
 	name: string;
@@ -7,20 +9,17 @@ export interface Field {
 }
 
 export interface Table {
-	/** The name of the table. */
-	name: string;
-
 	/** The fields. */
 	fields: Field[];
 
-	/** Sort the data by this field. */
-	sortField: string;
+	/** The index of the field on which the data is sorted and binned. It should be unique per record. */
+	indexOfId: number;
 
-	/** Bin the records by this function body, which uses the parameter sortField and returns a string. */
-	binningFunctionBody: string;
+	/** Bin the records by this function body, which uses the parameter id and returns a string. */
+	binningFunctionBody: string | undefined;
 }
 
 export interface Config {
 	/** The tables. */
-	tables: Table[];
+	tables: { [prop: string]: Table };
 }

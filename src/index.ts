@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as WS from 'ws';
 import { JSONType } from 'elm-app';
 import { Config } from './config';
-import { Data } from './data';
+import { Data, DataRecord } from './data';
 
 let data: Data;
 
@@ -29,24 +29,51 @@ async function processMessage(ws: WS, message: string): Promise<void> {
 	const command: string = json.command;
 	try {
 		if (command === 'set') {
-			// data.set();
-			success = true;
+			if (typeof json.table !== 'string' || !Array.isArray(json.dataRecords)) {
+				throw new Error('Invalid request JSON with invalid set command parameters.');
+			}
+			data.set(json.table, json.dataRecords as DataRecord[], (error: string | undefined) => {
+				ws.send(JSON.stringify({
+					id: request.id,
+					success: (error === undefined),
+					error: error
+				}));
+			});
+			// success = true;
 		}
 		else if (command === 'delete') {
 			// data.delete();
-			success = true;
+			// success = true;
 		}
 		else if (command === 'get') {
-			// data.get();
-			success = true;
+			if (typeof json.table !== 'string' || (typeof json.id !== 'number' && typeof json.id !== 'string' && typeof json.id !== 'boolean')) {
+				throw new Error('Invalid request JSON with invalid get command parameters.');
+			}
+			data.get(json.table, json.id, (dataRecord: DataRecord | undefined) => {
+				if (dataRecord === undefined) {
+					ws.send(JSON.stringify({
+						id: request.id,
+						success: false,
+						error: 'Data record not found.'
+					}));
+				}
+				else {
+					console.log(JSON.stringify(dataRecord));
+					ws.send(JSON.stringify({
+						id: request.id,
+						success: true,
+						data: dataRecord
+					}));
+				}
+			});
 		}
 		else if (command === 'has') {
 			// data.has();
-			success = true;
+			// success = true;
 		}
 		else if (command === 'size') {
 			// data.size();
-			success = true;
+			// success = true;
 		}
 		else {
 			throw new Error('Invalid command "' + command + '".');
@@ -54,14 +81,7 @@ async function processMessage(ws: WS, message: string): Promise<void> {
 	}
 	catch (e) {
 		console.log('Error: ' + e.message);
-		// error = e.message;
 	}
-	// ws.send(JSON.stringify({
-	// 	id: request.id,
-	// 	success: success,
-	// 	error: error,
-	// 	data: responseData
-	// }));
 }
 
 function startServer(args: string[]): void {
@@ -79,7 +99,7 @@ function startServer(args: string[]): void {
 
 	// Print the config.
 	console.log('The configuration is:');
-	console.log(config);
+	console.log(JSON.stringify(config));
 
 	// Startup the data object.
 	data = new Data(config, dataFolderPath);
