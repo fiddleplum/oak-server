@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as WS from 'ws';
+import * as https from 'https';
 import { JSONType } from 'elm-app';
 import { Config } from './config';
 import { Data, DataRecord } from './data';
@@ -108,18 +109,19 @@ function startServer(args: string[]): void {
 	// Startup the data object.
 	data = new Data(config, dataFolderPath);
 
-	// Startup the WebSocket server.
-	const wss = new WS.Server({
-		port: 8081
-	});
-
+	// Create the data folder if it doesn't exist.
 	if (!fs.existsSync(dataFolderPath)) {
 		fs.mkdirSync(dataFolderPath);
 	}
 
-	console.log('The server has started on port 8081.');
+	// Start the HTTPS and WebSocket servers.
+	const key  = fs.readFileSync('key.pem', 'utf8');
+	const cert = fs.readFileSync('cert.pem', 'utf8');
+	const server = https.createServer({ key, cert });
+	const webSocketServer = new WS.Server({ server });
 
-	wss.on('connection', (ws) => {
+	// Setup the WebSocket connection and message callbacks.
+	webSocketServer.on('connection', (ws: WS) => {
 		console.log('Accepted a new connection.');
 		ws.on('message', (message: WS.Data) => {
 			processMessage(ws, message.toString());
@@ -131,6 +133,10 @@ function startServer(args: string[]): void {
 			console.log('Error in connection.');
 		});
 	});
+
+	// Start the HTTPS server listening.
+	server.listen(8081);
+	console.log(`The server has started on port 8081.`);
 }
 
 const args = process.argv.slice(2);
