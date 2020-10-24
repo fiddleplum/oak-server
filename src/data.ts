@@ -6,7 +6,22 @@ export class Data {
 		this._config = config;
 		this._folder = folder;
 
+		// Create the data folder if it doesn't exist.
+		if (!fs.existsSync(this._folder)) {
+			fs.mkdirSync(this._folder);
+		}
+
 		for (const tableName in this._config.tables) {
+			// Create the data folder if it doesn't exist.
+			if (!fs.existsSync(this._folder + '/' + tableName)) {
+				try {
+					fs.mkdirSync(this._folder + '/' + tableName);
+				}
+				catch (error) {
+					throw new Error(`Could not create new table folder at "${this._folder + '/' + tableName}".`);
+				}
+			}
+
 			const table = this._config.tables[tableName];
 			let binningFunction: (id: string) => string;
 			// If it has a binning function, use it.
