@@ -16,7 +16,7 @@ export interface Table {
 	indexOfId: number;
 
 	/** Bin the records by this function body, which uses the parameter id and returns a string. */
-	binningFunctionBody: string | undefined;
+	binningFunctionBody?: string;
 }
 
 export interface Config {
