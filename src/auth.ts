@@ -3,7 +3,7 @@ import * as Crypto from 'crypto';
 import { Data } from './data';
 import { Config } from 'config';
 
-enum UserRecord { USER, PASSWORD_HASH, SALT, SESSION }
+enum AuthRecord { USER, PASSWORD_HASH, SALT, SESSION }
 
 /*
 When a WS connection is opened, it exists only in a single browser tab and session.
@@ -63,12 +63,15 @@ export class Auth {
 					const passwordHash = hash.update(password).digest('hex');
 					if (passwordHash === dataRecord[1]) {
 						const session = this._randomDigits(16);
-						this._unauthenticatedSessions.delete(ws);
-						this._authenticatedSessions.add(ws);
-						return {
-							success: true,
-							session: session
-						};
+						dataRecord[AuthRecord.SESSION] = session;
+						return this._data.set('auth', [dataRecord]).then(() => {
+							this._unauthenticatedSessions.delete(ws);
+							this._authenticatedSessions.add(ws);
+							return {
+								success: true,
+								session: session
+							};
+						});
 					}
 				}
 			}
@@ -83,7 +86,7 @@ export class Auth {
 	async authenticate(user: string, session: string, ws: WS): Promise<{ success: boolean, error?: string }> {
 		return this._data.get('auth', user).then((dataRecord) => {
 			// If it is a valid session,
-			if (dataRecord !== undefined && session === dataRecord[UserRecord.SESSION]) {
+			if (dataRecord !== undefined && session === dataRecord[AuthRecord.SESSION]) {
 				this._unauthenticatedSessions.delete(ws);
 				this._authenticatedSessions.add(ws);
 				return {
