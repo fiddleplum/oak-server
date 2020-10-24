@@ -49,12 +49,14 @@ export class Server {
 		// Setup the WebSocket connection and message callbacks.
 		webSocketServer.on('connection', (ws: WS) => {
 			console.log('Accepted a new connection.');
+			console.log();
 			this._auth.connect(ws);
 			ws.on('message', (message: WS.Data) => {
 				this._processMessage(ws, message.toString());
 			});
 			ws.on('close', () => {
 				console.log('Closed a connection.');
+				console.log();
 				this._auth.disconnect(ws);
 			});
 			ws.on('error', () => {
@@ -70,63 +72,85 @@ export class Server {
 
 	/** Process a message from the client. */
 	private async _processMessage(ws: WS, message: string): Promise<void> {
-		const request = JSON.parse(message);
-		if (typeof request !== 'object' || request === null || Array.isArray(request)) {
-			throw new Error('Invalid request is not an object.');
-		}
-		if (typeof request.id !== 'number') {
-			throw new Error('Invalid request with invalid or no id.');
-		}
-		if (request.json === undefined) {
-			throw new Error('Invalid request with no JSON data.');
-		}
-		const json: JSONType = request.json;
-		console.log(json);
-		if (typeof json !== 'object' || json === null || Array.isArray(json)) {
-			throw new Error('Invalid request JSON is not an object.');
-		}
-		if (typeof json.command !== 'string') {
-			throw new Error('Invalid request JSON with invalid or no command.');
-		}
-		const command: string = json.command;
 		try {
+			// Get the request as the message string in JSON.
+			let request: JSONType;
+			try {
+				request = JSON.parse(message);
+			}
+			catch (error) {
+				throw new Error('Request must be valid JSON. ' + error);
+			}
+			if (typeof request !== 'object' || request === null || Array.isArray(request)) {
+				throw new Error('Request must be an object.');
+			}
+
+			// Get the id of the request.
+			const id = request.id;
+			if (typeof id !== 'number') {
+				throw new Error('Request.id must be a number.');
+			}
+
+			// Get the data of the request.
+			const data = request.data;
+			if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+				throw new Error('Request.data must be an object.');
+			}
+
+			// Get the command of the request data.
+			const command = data.command;
+			if (typeof command !== 'string') {
+				throw new Error('Request.data.command must be a string.');
+			}
+
 			if (command === 'get') {
-				if (typeof json.table !== 'string' || (typeof json.id !== 'number' && typeof json.id !== 'string' && typeof json.id !== 'boolean')) {
-					throw new Error('Invalid request JSON with invalid get command parameters.');
+				if (data === undefined) {
+					throw new Error('Set command has no data.');
 				}
-				this._data.get(json.table, json.id).then((dataRecord: DataRecord | undefined) => {
-					if (dataRecord === undefined) {
-						ws.send(JSON.stringify({
-							id: request.id,
+				const table = data.table;
+				if (typeof table !== 'string') {
+					throw new Error('Set command data.table must be a string.');
+				}
+				const record = data.record;
+				if (typeof record !== 'string') {
+					throw new Error('Set command data.record must be a string.');
+				}
+				this._data.get(table, record).then((DataRecord: DataRecord | undefined) => {
+					if (DataRecord === undefined) {
+						this.sendResponse({
 							success: false,
-							error: 'Data record not found.'
-						}));
+							error: 'data record not found.'
+						}, id, ws);
 					}
 					else {
-						console.log(JSON.stringify(dataRecord));
-						ws.send(JSON.stringify({
-							id: request.id,
+						this.sendResponse({
 							success: true,
-							data: dataRecord
-						}));
+							data: DataRecord
+						}, id, ws);
 					}
 				});
 			}
 			else if (command === 'set') {
-				if (typeof json.table !== 'string' || !Array.isArray(json.dataRecords)) {
-					throw new Error('Invalid request JSON with invalid set command parameters.');
+				if (data === undefined) {
+					throw new Error('Set command has no data.');
 				}
-				this._data.set(json.table, json.dataRecords as DataRecord[]).then(() => {
-					ws.send(JSON.stringify({
-						id: request.id,
+				const table = data.table;
+				if (typeof table !== 'string') {
+					throw new Error('Set command data.table must be a string.');
+				}
+				const records = data.records;
+				if (!Array.isArray(records)) {
+					throw new Error('Set command data.records must be an array.');
+				}
+				this._data.set(table, records as DataRecord[]).then(() => {
+					this.sendResponse({
 						success: true
-					}));
+					}, id, ws);
 				}).catch((error: Error) => {
-					ws.send(JSON.stringify({
-						id: request.id,
+					this.sendResponse({
 						success: false,
 						error: error.message
-					}));
+					}, id, ws);
 				});
 			}
 			else if (command === 'delete') {
@@ -142,54 +166,81 @@ export class Server {
 				// success = true;
 			}
 			else if (command === 'create user') {
-				const user = json.user;
-				const password = json.password;
-				if (typeof user !== 'string' || typeof password !== 'string') {
-					throw new Error('Invalid request JSON with invalid create user command parameters.');
+				if (data === undefined) {
+					throw new Error('Create user command has no data.');
+				}
+				const user = data.user;
+				const password = data.password;
+				if (typeof user !== 'string') {
+					throw new Error('Create user command data.user must be a string.');
+				}
+				if (typeof password !== 'string') {
+					throw new Error('Create user command data.password must be a string.');
 				}
 				this._auth.createUser(user, password).then((result) => {
 					if (result.success) {
-						ws.send(JSON.stringify({
-							id: request.id,
+						this.sendResponse({
 							success: true
-						}));
+						}, id, ws);
 					}
 					else {
-						ws.send(JSON.stringify({
-							id: request.id,
+						this.sendResponse({
 							success: false,
 							error: 'Could not create user: ' + result.error
-						}));
+						}, id, ws);
 					}
 				});
 			}
-			// else if (command === 'login') {
-			// 	const user = json.user;
-			// 	const password = json.password;
-			// 	if (typeof user !== 'string' || typeof password !== 'string') {
-			// 		throw new Error('Invalid request JSON with invalid login command parameters.');
-			// 	}
-			// 	this._data.get('users', user).then((userRecord) => {
-			// }
+			else if (command === 'login') {
+				if (data === undefined) {
+					throw new Error('Create user command has no data.');
+				}
+				const user = data.user;
+				const password = data.password;
+				if (typeof user !== 'string') {
+					throw new Error('Create user command data.user must be a string.');
+				}
+				if (typeof password !== 'string') {
+					throw new Error('Create user command data.password must be a string.');
+				}
+				this._auth.login(user, password, ws).then((result) => {
+					if (result.success) {
+						this.sendResponse({
+							success: true,
+							session: result.session
+						}, id, ws);
+					}
+					else {
+						this.sendResponse({
+							success: false,
+							error: 'Could not login: ' + result.error
+						}, id, ws);
+					}
+				});
+			}
 			else if (command === 'authenticate') {
-				const user = json.user;
-				const session = json.session;
-				if (typeof user !== 'string' || typeof session !== 'string') {
-					throw new Error('Invalid request JSON with invalid authenticate command parameters.');
+				if (data === undefined) {
+					throw new Error('Create user command has no data.');
+				}
+				const user = data.user;
+				const session = data.session;
+				if (typeof user !== 'string') {
+					throw new Error('Create user command data.user must be a string.');
+				}
+				if (typeof session !== 'string') {
+					throw new Error('Create user command data.session must be a string.');
 				}
 				this._auth.authenticate(user, session, ws).then((result) => {
 					if (result.success) {
-						ws.send(JSON.stringify({
-							id: request.id,
+						this.sendResponse({
 							success: true
-						}));
+						}, id, ws);
 					}
 					else {
-						ws.send(JSON.stringify({
-							id: request.id,
+						this.sendResponse({
 							success: false,
 							error: 'Please login again.'
-						}));
+						}, id, ws);
 					}
 				});
 			}
@@ -197,13 +248,31 @@ export class Server {
 				throw new Error('Invalid command "' + command + '".');
 			}
 		}
-		catch (e) {
-			console.log('Error: ' + e.message);
+		catch (error) {
+			console.log('Error while receiving websocket message.');
+			console.log('  Message: ' + message);
+			console.log('  Error: ' + error);
+			console.log();
 		}
+	}
+
+	/** Send a response. */
+	sendResponse(data: ResponseData, id: number, ws: WS): void {
+		ws.send(JSON.stringify({
+			id,
+			data
+		}));
 	}
 
 	private _data: Data;
 	private _auth: Auth;
+}
+
+interface ResponseData {
+	success: boolean;
+	error?: string;
+	data?: JSONType;
+	[x: string]: any;
 }
 
 try {
