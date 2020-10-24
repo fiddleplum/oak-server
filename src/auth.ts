@@ -3,7 +3,7 @@ import * as Crypto from 'crypto';
 import { Data } from './data';
 import { Config } from 'config';
 
-enum UserRecord { USER, PASSWORD_HASH, SESSION, SALT }
+enum UserRecord { USER, PASSWORD_HASH, SALT, SESSION }
 
 /*
 When a WS connection is opened, it exists only in a single browser tab and session.
@@ -37,20 +37,45 @@ export class Auth {
 				};
 			}
 			// Create the salt.
-			const saltLengthInHexDigits = 16;
-			const salt = Crypto.randomBytes(Math.ceil(saltLengthInHexDigits / 2))
-				.toString('hex') // Convert to hexadecimal format.
-				.slice(0, saltLengthInHexDigits); // Return required number of characters.
+			const salt = this._randomDigits(16);
 			// Create the hash.
 			const hash = Crypto.createHmac('sha512', salt);
 			// Create the hashed password.
 			const passwordHash = hash.update(password).digest('hex');
 			// Set the data and return.
-			return this._data.set('auth', [[user, passwordHash, '', salt]]).then(() => {
+			return this._data.set('auth', [[user, passwordHash, salt, '']]).then(() => {
 				return {
 					success: true
 				};
 			});
+		});
+	}
+
+	/** User login. */
+	async login(user: string, password: string, ws: WS): Promise<{ success: boolean, error?: string, session?: string }> {
+		return this._data.get('auth', user).then((dataRecord) => {
+			if (dataRecord !== undefined && dataRecord.length >= 3) {
+				const salt = dataRecord[2];
+				if (typeof salt === 'string') {
+					// Create the hash.
+					const hash = Crypto.createHmac('sha512', salt);
+					// Create the hashed password.
+					const passwordHash = hash.update(password).digest('hex');
+					if (passwordHash === dataRecord[1]) {
+						const session = this._randomDigits(16);
+						this._unauthenticatedSessions.delete(ws);
+						this._authenticatedSessions.add(ws);
+						return {
+							success: true,
+							session: session
+						};
+					}
+				}
+			}
+			return {
+				success: false,
+				error: 'Invalid username or password.'
+			};
 		});
 	}
 
@@ -100,6 +125,12 @@ export class Auth {
 				'type': 'string'
 			}]
 		};
+	}
+
+	private _randomDigits(length: number): string {
+		return Crypto.randomBytes(Math.ceil(length / 2))
+			.toString('hex') // Convert to hexadecimal format.
+			.slice(0, length); // Return required number of characters.
 	}
 
 	private _data: Data;
