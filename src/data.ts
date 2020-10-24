@@ -48,14 +48,16 @@ export class Data {
 		}, 5000);
 	}
 
-	/** Gets a data record. Accepts a callback that takes the data record when it is loaded. */
-	async get(table: string, id: FieldType): Promise<DataRecord> {
+	/** Gets a data record.
+	 * Returns a promise that resolves with the data record when it is loaded,
+	 * or undefined if the data record was not found. */
+	async get(table: string, id: FieldType): Promise<DataRecord | undefined> {
 		return this._getRecordIndex(table, id, false).then((result) => {
-			if (result.found) {
+			if (result.cache !== undefined && result.found) {
 				return result.cache.dataRecords[result.index];
 			}
 			else {
-				throw new Error(`Record "${id}" in table "${table}" not found.`);
+				return undefined;
 			}
 		});
 	}
@@ -81,13 +83,18 @@ export class Data {
 				const indexOfId = this._config.tables[table].indexOfId;
 				promises.push(this._getRecordIndex(table, dataRecord[indexOfId], true).then((result) => {
 					console.log('Setting ' + dataRecords[indexOfId] + ' ' + result.found);
-					if (result.found) {
-						result.cache.dataRecords[result.index] = dataRecord;
+					if (result.cache !== undefined) {
+						if (result.found) {
+							result.cache.dataRecords[result.index] = dataRecord;
+						}
+						else {
+							result.cache.dataRecords.splice(result.index, 0, dataRecord);
+						}
+						result.cache.dirty = true;
 					}
 					else {
-						result.cache.dataRecords.splice(result.index, 0, dataRecord);
+						throw new Error(`Failed to set record ${dataRecord[indexOfId]}. Cache could not be loaded.`);
 					}
-					result.cache.dirty = true;
 				}));
 			}
 			return Promise.all(promises);
@@ -105,7 +112,7 @@ export class Data {
 				const id = ids[i];
 				return this._getRecordIndex(table, id, false).then((result) => {
 					console.log('Deleting ' + id + ' ' + result.found);
-					if (result.found) {
+					if (result.cache !== undefined && result.found) {
 						result.cache.dataRecords.splice(result.index, 1);
 						result.cache.dirty = true;
 					}
@@ -115,33 +122,45 @@ export class Data {
 	}
 
 	/** Gets the index in a cache where the record is. */
-	private async _getRecordIndex(table: string, id: FieldType, createIfNotFound: boolean): Promise<{ cache: Cache, index: number, found: boolean }> {
-		return this._loadCache(table, id, createIfNotFound).then((cache: Cache) => {
-			const indexOfId = this._config.tables[table].indexOfId;
-			let low = 0;
-			let high = cache.dataRecords.length;
-			while (low < high) {
-				const mid = (low + high) >>> 1;
-				if (cache.dataRecords[mid][indexOfId] < id) {
-					low = mid + 1;
+	private async _getRecordIndex(table: string, id: FieldType, createIfNotFound: boolean): Promise<{ cache: Cache | undefined, index: number, found: boolean }> {
+		return this._loadCache(table, id, createIfNotFound).then((cache: Cache | undefined) => {
+			if (cache !== undefined) {
+				const indexOfId = this._config.tables[table].indexOfId;
+				let low = 0;
+				let high = cache.dataRecords.length;
+				while (low < high) {
+					const mid = (low + high) >>> 1;
+					if (cache.dataRecords[mid][indexOfId] < id) {
+						low = mid + 1;
+					}
+					else {
+						high = mid;
+					}
 				}
-				else {
-					high = mid;
-				}
+				return {
+					cache: cache,
+					index: low,
+					found: (low < cache.dataRecords.length && cache.dataRecords[low][indexOfId] === id)
+				};
 			}
-			return {
-				cache: cache,
-				index: low,
-				found: (cache.dataRecords[low][indexOfId] === id)
-			};
+			else {
+				return {
+					cache: undefined,
+					index: 0,
+					found: false
+				};
+			}
 		});
 	}
 
 	/** Loads a data file into the cache. Accepts a callback that takes the cache, when the cache is loaded. */
-	private async _loadCache(table: string, id: FieldType, createIfNotFound: boolean): Promise<Cache> {
+	private async _loadCache(table: string, id: FieldType, createIfNotFound: boolean): Promise<Cache | undefined> {
 		// Get the filename from the table and sort field.
 		const binningFunction = this._binningFunctions.get(table);
-		const filename = this._folder + '/' + table + '/' + (binningFunction ? binningFunction(id) : '');
+		if (binningFunction === undefined) {
+			return undefined;
+		}
+		const filename = this._folder + '/' + table + '/' + binningFunction(id);
 		// Get the file from the cache.
 		const cache = this._caches.get(filename);
 		// If the file is in the cache,
@@ -170,15 +189,15 @@ export class Data {
 				newCache.lastSave = Date.now();
 				newCache.status = 'loaded';
 				return newCache;
-			}).catch((error: Error) => {
+			}).catch(() => {
 				if (createIfNotFound) {
+					this._caches.set(filename, newCache);
 					newCache.lastSave = Date.now();
 					newCache.status = 'loaded';
 					return newCache;
 				}
 				else {
-					this._caches.delete(filename);
-					throw new Error(`Could not load data file from cache. "${filename}". ${error.message}`);
+					return undefined;
 				}
 			});
 		}
