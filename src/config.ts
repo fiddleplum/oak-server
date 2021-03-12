@@ -10,16 +10,16 @@ export interface Field {
 
 export interface Table {
 	/** The fields. */
-	fields: Field[];
+	fields: (Field | undefined)[];
 
 	/** The index of the field on which the data is sorted and binned. It should be unique per record. */
 	indexOfId: number;
 
-	/** Bin the records by this function body, which uses the parameter id and returns a string. */
+	/** Bin the records by this function body, which uses the parameter id and returns a string, which is the filename without the extension. */
 	binningFunctionBody?: string;
 }
 
 export interface Config {
 	/** The tables. */
-	tables: { [prop: string]: Table };
+	tables: { [prop: string]: (Table | undefined) };
 }

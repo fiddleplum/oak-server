@@ -104,18 +104,7 @@ export class Server {
 			}
 
 			if (command === 'get') {
-				if (data === undefined) {
-					throw new Error('Set command has no data.');
-				}
-				const table = data.table;
-				if (typeof table !== 'string') {
-					throw new Error('Set command data.table must be a string.');
-				}
-				const record = data.record;
-				if (typeof record !== 'string') {
-					throw new Error('Set command data.record must be a string.');
-				}
-				this._data.get(table, record).then((DataRecord: DataRecord | undefined) => {
+				this._data.get(data).then((DataRecord: DataRecord | undefined) => {
 					if (DataRecord === undefined) {
 						this.sendResponse({
 							success: false,
@@ -131,18 +120,7 @@ export class Server {
 				});
 			}
 			else if (command === 'set') {
-				if (data === undefined) {
-					throw new Error('Set command has no data.');
-				}
-				const table = data.table;
-				if (typeof table !== 'string') {
-					throw new Error('Set command data.table must be a string.');
-				}
-				const records = data.records;
-				if (!Array.isArray(records)) {
-					throw new Error('Set command data.records must be an array.');
-				}
-				this._data.set(table, records as DataRecord[]).then(() => {
+				this._data.set(data).then(() => {
 					this.sendResponse({
 						success: true
 					}, id, ws);
@@ -154,8 +132,16 @@ export class Server {
 				});
 			}
 			else if (command === 'delete') {
-				// data.delete();
-				// success = true;
+				this._data.delete(data).then(() => {
+					this.sendResponse({
+						success: true
+					}, id, ws);
+				}).catch((error: Error) => {
+					this.sendResponse({
+						success: false,
+						error: error.message
+					}, id, ws);
+				});
 			}
 			else if (command === 'has') {
 				// data.has();
