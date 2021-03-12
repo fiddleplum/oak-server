@@ -1,25 +1,27 @@
-export type FieldType = number | string | boolean;
+/** The allowed groups and users for a given access type. */
+export interface AllowPermissions {
+	/** The allowed groups. */
+	groups: string[];
 
-export interface Field {
-	/** The name of the field. */
-	name: string;
-
-	/** The type of the field. */
-	type: 'number' | 'string' | 'boolean';
+	/** The allowed users. */
+	users: string[];
 }
 
-export interface Table {
-	/** The fields. */
-	fields: Field[];
+/** The patterns and associated permissions for different access types. */
+export interface Permissions {
+	/** The pattern to match. */
+	pattern: string;
 
-	/** The index of the field on which the data is sorted and binned. It should be unique per record. */
-	indexOfId: number;
+	/** The pattern to match. */
+	patternRegEx: RegExp;
 
-	/** Bin the records by this function body, which uses the parameter id and returns a string. */
-	binningFunctionBody?: string;
+	/** The allowed edit groups and users. */
+	edit: AllowPermissions;
+
+	/** The allowed view groups and users. */
+	view: AllowPermissions;
 }
 
 export interface Config {
-	/** The tables. */
-	tables: { [prop: string]: Table };
+	permissions: Permissions[];
 }

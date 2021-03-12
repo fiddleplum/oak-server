@@ -103,9 +103,18 @@ export class Server {
 				throw new Error('Request.data.command must be a string.');
 			}
 
-			if (command === 'get') {
+			if (command === 'list') {
 				if (data === undefined) {
-					throw new Error('Set command has no data.');
+					throw new Error('Get command has no data.');
+				}
+				const table = data.table;
+				if (typeof table !== 'string') {
+					throw new Error('Set command data.table must be a string.');
+				}
+			}
+			else if (command === 'get') {
+				if (data === undefined) {
+					throw new Error('Get command has no data.');
 				}
 				const table = data.table;
 				if (typeof table !== 'string') {
