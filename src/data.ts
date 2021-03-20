@@ -1,6 +1,6 @@
 import { Config, FieldType } from './config';
 import * as fs from 'fs';
-import { JSONType } from 'elm-app';
+import { JSONObject } from 'elm-app';
 
 export class Data {
 	constructor(config: Config, folder: string) {
@@ -12,6 +12,7 @@ export class Data {
 			fs.mkdirSync(this._folder);
 		}
 
+		// For each table in the config,
 		for (const tableName in this._config.tables) {
 			// Create the data folder if it doesn't exist.
 			if (!fs.existsSync(this._folder + '/' + tableName)) {
@@ -19,10 +20,11 @@ export class Data {
 					fs.mkdirSync(this._folder + '/' + tableName);
 				}
 				catch (error) {
-					throw new Error(`Could not create new table folder at "${this._folder + '/' + tableName}".`);
+					throw new Error(`Could not create new table folder at "${this._folder + '/' + tableName}": ${error}`);
 				}
 			}
 
+			// Setup the binning function.
 			const table = this._config.tables[tableName]!;
 			let binningFunction: (id: string) => string;
 			// If it has a binning function, use it.
@@ -50,15 +52,15 @@ export class Data {
 	}
 
 	/** Gets a list of data records given the filter parameters.
-	 * The first dimension of filters are ORed together and the second dimension are ANDed together.
-	 * So A || (B && C) would be [[A], [B, C]].
-	 * Returns a promise that resolves with the array when they are loaded,
-	 * or an empty array if no match was found. */
-	async getFiltered(data: { [prop: string]: (JSONType | undefined) }, filters: Filter[][]): Promise<DataRecord[]> {
+	 *  The first dimension of filters are ORed together and the second dimension are ANDed together.
+	 *  So A || (B && C) would be [[A], [B, C]].
+	 *  Returns a promise that resolves with the array when they are loaded,
+	 *  or an empty array if no match was found. */
+	async getFiltered(data: JSONObject, _filters: Filter[][]): Promise<DataRecord[]> {
 		// Get and validate the table.
 		const table = data.table;
 		if (typeof table !== 'string') {
-			throw new Error('Set command data.table must be a string.');
+			throw new Error('data.table must be a string.');
 		}
 		// Get the table configuration.
 		const tableConfig = this._config.tables[table];
@@ -75,24 +77,31 @@ export class Data {
 		if (cache === undefined) {
 			return results;
 		}
-		for (let i = 0, l = cache.dataRecords.length; i < l; i++) {
-		}
+		// for (let i = 0, l = cache.dataRecords.length; i < l; i++) {
+		// }
 		return results;
 	}
 
-	/** Gets a data record.
-	 * Returns a promise that resolves with the data record when it is loaded,
-	 * or undefined if the data record was not found. */
-	async get(data: { [prop: string]: (JSONType | undefined) }): Promise<DataRecord | undefined> {
+	/** Gets a data record. Returns a promise that resolves with the data record when it is loaded,
+	 *  or undefined if the data record was not found. It rejects if the data format is incorrect.
+	 *  The data format is:
+	 *  ```
+	 *  {
+	 *    table: string, // name of the table
+	 *    id: string | number | boolean // id of the field
+	 *  }
+	 *  ```
+	 */
+	async get(data: JSONObject): Promise<DataRecord | undefined> {
 		// Get and validate the table.
 		const table = data.table;
 		if (typeof table !== 'string') {
-			throw new Error('Set command data.table must be a string.');
+			throw new Error('data.table must be a string.');
 		}
 		// Get and validate the id.
 		const id = data.id;
 		if (typeof id !== 'string' && typeof id !== 'number' && typeof id !== 'boolean') {
-			throw new Error('Set command data.id must be a string, number, or boolean.');
+			throw new Error('data.id must be a string, number, or boolean.');
 		}
 		// Get the data record.
 		return this._getDataRecordCacheAndIndex(table, id, false).then((result) => {
@@ -100,22 +109,29 @@ export class Data {
 				return result.cache.dataRecords[result.index];
 			}
 			else {
-				return undefined;
+				throw new Error(`The data record with id ${id} was not found in table ${table}.`);
 			}
 		});
 	}
 
-	/** Sets fields of a record. */
-	async set(data: { [prop: string]: (JSONType | undefined) }): Promise<void[]> {
+	/** Sets fields of a record. It returns a promise that resolves when complete and rejects if
+	 *  the data format is incorrect or if the table is not found. The data format is:
+	 *  ```
+	 *  {
+	 *    table: string, // name of the table
+	 *    dataRecords: (string | number | boolean)[][] // a list of data records, each being a list of fields
+	 *  }
+	 *  ```*/
+	async set(data: JSONObject): Promise<void[]> {
 		// Get and validate the table.
 		const table = data.table;
 		if (typeof table !== 'string') {
-			throw new Error('Set command data.table must be a string.');
+			throw new Error('data.table must be a string.');
 		}
 		// Get and validate the data.dataRecord.
 		const dataRecords = data.dataRecords;
 		if (!Array.isArray(dataRecords)) {
-			throw new Error('Set command data.dataRecords must be an array.');
+			throw new Error('data.dataRecords must be an array.');
 		}
 		// Get the table configuration.
 		const tableConfig = this._config.tables[table];
@@ -141,7 +157,7 @@ export class Data {
 			// Get the cache and index given the data record's id field.
 			const indexOfId = tableConfig.indexOfId;
 			promises.push(this._getDataRecordCacheAndIndex(table, dataRecord[indexOfId] as FieldType, true).then((result) => {
-				console.log('Setting ' + dataRecords[indexOfId] + ' ' + result.found);
+				console.log(`Setting ${dataRecords[indexOfId]} ${result.found}`);
 				if (result.cache !== undefined) {
 					// Set or insert the data record in the cache and mark the cache as dirty.
 					if (result.found) {
@@ -160,8 +176,17 @@ export class Data {
 		return Promise.all(promises);
 	}
 
-	/** Deletes records from a table given their ids. */
-	async delete(data: { [prop: string]: (JSONType | undefined) }): Promise<void> {
+	/** Deletes records from a table given their ids. Resolves when complete, and rejects if the
+	 *  table is not found or the data format is incorrect. If any record is not found, it still
+	 *  resolves. The data format is:
+	 *  ```
+	 *  {
+	 *    table: string, // the name of the table
+	 *    ids: string[] // the ids of the records to delete
+	 *  }
+	 *  ```
+	 */
+	async delete(data: JSONObject): Promise<void> {
 		// Get and validate the table.
 		const table = data.table;
 		if (typeof table !== 'string') {
@@ -177,7 +202,7 @@ export class Data {
 			// Get and validate the id.
 			const id = ids[i];
 			if (typeof id !== 'string' && typeof id !== 'number' && typeof id !== 'boolean') {
-				throw new Error('Each id must be a string, number, or boolean.');
+				throw new Error(`Each id at index ${i} must be a string, number, or boolean.`);
 			}
 			// Get the cache and index given the id.
 			return this._getDataRecordCacheAndIndex(table, id, false).then((result) => {
@@ -191,7 +216,8 @@ export class Data {
 		}
 	}
 
-	/** Gets the index in a cache where the record is. If it doesn't exist, it returns where it would be inserted if it did exist. */
+	/** Gets the index in a cache where the record is. If it doesn't exist, it returns where it
+	 *  would be inserted if it did exist. */
 	private async _getDataRecordCacheAndIndex(table: string, id: FieldType, createCacheIfNotFound: boolean): Promise<{ cache: Cache | undefined, index: number, found: boolean }> {
 		// Get the table configuration.
 		const tableConfig = this._config.tables[table];
@@ -231,8 +257,8 @@ export class Data {
 		});
 	}
 
-	/** Loads a data file into the cache.
-	 * Returns a promise that resolves with the cache when loaded, or undefined if it is not found or created. */
+	/** Loads a data file into the cache. Returns a promise that resolves with the cache when
+	 *  loaded, or undefined if it is not found or created. */
 	private async _loadCache(table: string, id: FieldType, createIfNotFound: boolean): Promise<Cache | undefined> {
 		// Get the filename from the table and sort field.
 		const binningFunction = this._binningFunctions.get(table);
@@ -282,22 +308,29 @@ export class Data {
 		}
 	}
 
-	_saveCache(filename: string, cache: Cache): void {
+	/** Saves the cache and marks it as clean. */
+	async _saveCache(filename: string, cache: Cache): Promise<void> {
 		console.log(`Saving cache "${filename}".`);
-		fs.writeFile(filename, JSON.stringify(cache.dataRecords), (err: NodeJS.ErrnoException | null) => {
-			if (err === null) {
-				cache.dirty = false;
-				cache.lastSave = Date.now();
-			}
-			else {
-				console.log(`Could not save data file from cache. "${filename}". ${err.message}`);
-			}
-		});
+		try {
+			await fs.promises.writeFile(filename, JSON.stringify(cache.dataRecords));
+			cache.dirty = false;
+			cache.lastSave = Date.now();
+		}
+		catch (error) {
+			console.log(`Could not save data file from cache. "${filename}". ${error}`);
+		}
 	}
 
+	/** The configuration given by the app that describes the tables and field formats. */
 	private _config: Config;
+
+	/** The folder where the data resides. */
 	private _folder: string;
+
+	/** The binning functions of each table. */
 	private _binningFunctions: Map<string, (id: FieldType) => string> = new Map();
+
+	/** The currently loaded files. */
 	private _caches: Map<string, Cache> = new Map();
 }
 
@@ -323,7 +356,7 @@ class Cache {
 }
 
 /** A filter option. */
-export interface Filter {
+interface Filter {
 	/** The name of the field to be checked. */
 	fieldName: string;
 

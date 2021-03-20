@@ -3,7 +3,7 @@ import * as WS from 'ws';
 import * as https from 'https';
 import { JSONType } from 'elm-app';
 import { Config } from './config';
-import { Data, DataRecord } from './data';
+import { Data } from './data';
 import { Auth } from './auth';
 
 export class Server {
@@ -72,6 +72,7 @@ export class Server {
 
 	/** Process a message from the client. */
 	private async _processMessage(ws: WS, message: string): Promise<void> {
+		let id: JSONType | undefined;
 		try {
 			// Get the request as the message string in JSON.
 			let request: JSONType;
@@ -86,7 +87,7 @@ export class Server {
 			}
 
 			// Get the id of the request.
-			const id = request.id;
+			id = request.id;
 			if (typeof id !== 'number') {
 				throw new Error('Request.id must be a number.');
 			}
@@ -103,45 +104,25 @@ export class Server {
 				throw new Error('Request.data.command must be a string.');
 			}
 
+			// Process the different commands.
 			if (command === 'get') {
-				this._data.get(data).then((DataRecord: DataRecord | undefined) => {
-					if (DataRecord === undefined) {
-						this.sendResponse({
-							success: false,
-							error: 'data record not found.'
-						}, id, ws);
-					}
-					else {
-						this.sendResponse({
-							success: true,
-							data: DataRecord
-						}, id, ws);
-					}
-				});
+				const dataRecord = await this._data.get(data);
+				this.sendResponse({
+					success: true,
+					data: dataRecord
+				}, id, ws);
 			}
 			else if (command === 'set') {
-				this._data.set(data).then(() => {
-					this.sendResponse({
-						success: true
-					}, id, ws);
-				}).catch((error: Error) => {
-					this.sendResponse({
-						success: false,
-						error: error.message
-					}, id, ws);
-				});
+				await this._data.set(data);
+				this.sendResponse({
+					success: true
+				}, id, ws);
 			}
 			else if (command === 'delete') {
-				this._data.delete(data).then(() => {
-					this.sendResponse({
-						success: true
-					}, id, ws);
-				}).catch((error: Error) => {
-					this.sendResponse({
-						success: false,
-						error: error.message
-					}, id, ws);
-				});
+				await this._data.delete(data);
+				this.sendResponse({
+					success: true
+				}, id, ws);
 			}
 			else if (command === 'has') {
 				// data.has();
@@ -152,93 +133,33 @@ export class Server {
 				// success = true;
 			}
 			else if (command === 'create user') {
-				if (data === undefined) {
-					throw new Error('Create user command has no data.');
-				}
-				const user = data.user;
-				const password = data.password;
-				if (typeof user !== 'string') {
-					throw new Error('Create user command data.user must be a string.');
-				}
-				if (typeof password !== 'string') {
-					throw new Error('Create user command data.password must be a string.');
-				}
-				this._auth.createUser(user, password).then((result) => {
-					if (result.success) {
-						this.sendResponse({
-							success: true
-						}, id, ws);
-					}
-					else {
-						this.sendResponse({
-							success: false,
-							error: 'Could not create user: ' + result.error
-						}, id, ws);
-					}
-				});
+				await this._auth.createUser(data);
+				this.sendResponse({
+					success: true
+				}, id, ws);
 			}
 			else if (command === 'login') {
-				if (data === undefined) {
-					throw new Error('Create user command has no data.');
-				}
-				const user = data.user;
-				const password = data.password;
-				if (typeof user !== 'string') {
-					throw new Error('Create user command data.user must be a string.');
-				}
-				if (typeof password !== 'string') {
-					throw new Error('Create user command data.password must be a string.');
-				}
-				this._auth.login(user, password, ws).then((result) => {
-					if (result.success) {
-						this.sendResponse({
-							success: true,
-							session: result.session
-						}, id, ws);
-					}
-					else {
-						this.sendResponse({
-							success: false,
-							error: 'Could not login: ' + result.error
-						}, id, ws);
-					}
-				});
+				const session = await this._auth.login(data, ws);
+				this.sendResponse({
+					success: true,
+					session: session
+				}, id, ws);
 			}
 			else if (command === 'authenticate') {
-				if (data === undefined) {
-					throw new Error('Create user command has no data.');
-				}
-				const user = data.user;
-				const session = data.session;
-				if (typeof user !== 'string') {
-					throw new Error('Create user command data.user must be a string.');
-				}
-				if (typeof session !== 'string') {
-					throw new Error('Create user command data.session must be a string.');
-				}
-				this._auth.authenticate(user, session, ws).then((result) => {
-					if (result.success) {
-						this.sendResponse({
-							success: true
-						}, id, ws);
-					}
-					else {
-						this.sendResponse({
-							success: false,
-							error: 'Please login again.'
-						}, id, ws);
-					}
-				});
+				await this._auth.authenticate(data, ws);
+				this.sendResponse({
+					success: true
+				}, id, ws);
 			}
 			else {
 				throw new Error('Invalid command "' + command + '".');
 			}
 		}
 		catch (error) {
-			console.log('Error while receiving websocket message.');
-			console.log('  Message: ' + message);
-			console.log('  Error: ' + error);
-			console.log();
+			this.sendResponse({
+				success: false,
+				error: `${error}`
+			}, typeof id === 'number' ? id : NaN, ws);
 		}
 	}
 

@@ -2,16 +2,18 @@ import * as WS from 'ws';
 import * as Crypto from 'crypto';
 import { Data } from './data';
 import { Config } from 'config';
+import { JSONObject } from 'elm-app';
 
 enum AuthRecord { USER, PASSWORD_HASH, SALT, SESSION }
 
 /*
-When a WS connection is opened, it exists only in a single browser tab and session.
-This means that authentication is only required at the beginning.
-
+When a WS connection is opened, it exists only in a single browser tab and browser session.
+This means that authentication is only required when the page is opened.
 */
 
+/** A class for authorizing new websocket connections as valid users. */
 export class Auth {
+	/** Constructs the class. */
 	constructor(data: Data) {
 		this._data = data;
 	}
@@ -28,81 +30,98 @@ export class Auth {
 	}
 
 	/** Create user. */
-	async createUser(user: string, password: string): Promise<{ success: boolean, error?: string }> {
-		return this._data.get('auth', user).then((dataRecord) => {
-			if (dataRecord !== undefined) {
-				return {
-					success: false,
-					error: 'The user "' + user + '" already exists.'
-				};
-			}
-			// Create the salt.
-			const salt = this._randomDigits(16);
-			// Create the hash.
-			const hash = Crypto.createHmac('sha512', salt);
-			// Create the hashed password.
-			const passwordHash = hash.update(password).digest('hex');
-			// Set the data and return.
-			return this._data.set('auth', [[user, passwordHash, salt, '']]).then(() => {
-				return {
-					success: true
-				};
-			});
-		});
+	async createUser(data: JSONObject): Promise<void> {
+		// Get and validate the user.
+		const user = data.user;
+		if (typeof user !== 'string') {
+			throw new Error(`data.user is not a string`);
+		}
+		// Get and validate the password.
+		const password = data.password;
+		if (typeof password !== 'string') {
+			throw new Error(`data.password is not a string`);
+		}
+		// Get the data record.
+		const existingDataRecord = await this._data.get({ table: 'auth', id: user });
+		if (existingDataRecord !== undefined) {
+			throw new Error(`The user "${user}" already exists.`);
+		}
+		// Create the salt.
+		const salt = this._randomDigits(16);
+		// Create the hash.
+		const hash = Crypto.createHmac('sha512', salt);
+		// Create the hashed password.
+		const passwordHash = hash.update(password).digest('hex');
+		// Create the data record.
+		const dataRecord = [user, passwordHash, salt, ''];
+		// Set the data and return.
+		await this._data.set({ table: 'auth', dataRecords: [dataRecord] });
 	}
 
 	/** User login. */
-	async login(user: string, password: string, ws: WS): Promise<{ success: boolean, error?: string, session?: string }> {
-		return this._data.get('auth', user).then((dataRecord) => {
-			if (dataRecord !== undefined && dataRecord.length >= 3) {
-				const salt = dataRecord[2];
-				if (typeof salt === 'string') {
-					// Create the hash.
-					const hash = Crypto.createHmac('sha512', salt);
-					// Create the hashed password.
-					const passwordHash = hash.update(password).digest('hex');
-					if (passwordHash === dataRecord[1]) {
-						const session = this._randomDigits(16);
-						dataRecord[AuthRecord.SESSION] = session;
-						return this._data.set('auth', [dataRecord]).then(() => {
-							this._unauthenticatedSessions.delete(ws);
-							this._authenticatedSessions.add(ws);
-							return {
-								success: true,
-								session: session
-							};
-						});
-					}
-				}
-			}
-			return {
-				success: false,
-				error: 'Invalid username or password.'
-			};
-		});
+	async login(data: JSONObject, ws: WS): Promise<string> {
+		// Get and validate the user.
+		const user = data.user;
+		if (typeof user !== 'string') {
+			throw new Error(`data.user is not a string`);
+		}
+		// Get and validate the password.
+		const password = data.password;
+		if (typeof password !== 'string') {
+			throw new Error(`data.password is not a string`);
+		}
+		// Get the data record.
+		const dataRecord = await this._data.get({ table: 'auth', id: user });
+		if (dataRecord === undefined) {
+			throw new Error(`Invalid username or password.`);
+		}
+		// Get the salt.
+		const salt = dataRecord[AuthRecord.SALT] as string;
+		// Create the hash.
+		const hash = Crypto.createHmac('sha512', salt);
+		// Create the hashed password.
+		const passwordHash = hash.update(password).digest('hex');
+		if (passwordHash !== dataRecord[AuthRecord.PASSWORD_HASH]) {
+			throw new Error(`Invalid username or password.`);
+		}
+		// Create the session id.
+		const session = this._randomDigits(16);
+		dataRecord[AuthRecord.SESSION] = session;
+		await this._data.set({ table: 'auth', dataRecords: [dataRecord] });
+		// Add it to the sessions arrays.
+		this._unauthenticatedSessions.delete(ws);
+		this._authenticatedSessions.add(ws);
+		// Return the session id.
+		return session;
 	}
 
 	/** Authenticates a web socket from a username and session token. */
-	async authenticate(user: string, session: string, ws: WS): Promise<{ success: boolean, error?: string }> {
-		return this._data.get('auth', user).then((dataRecord) => {
-			// If it is a valid session,
-			if (dataRecord !== undefined && session === dataRecord[AuthRecord.SESSION]) {
-				this._unauthenticatedSessions.delete(ws);
-				this._authenticatedSessions.add(ws);
-				return {
-					success: true
-				};
-			}
-			else {
-				// They didn't match, so remove it to the unauthenticated sessions.
-				this._authenticatedSessions.delete(ws);
-				this._unauthenticatedSessions.add(ws);
-				return {
-					success: false,
-					error: 'Invalid session.'
-				};
-			}
-		});
+	async authenticate(data: JSONObject, ws: WS): Promise<boolean> {
+		// Get and validate the user.
+		const user = data.user;
+		if (typeof user !== 'string') {
+			throw new Error(`data.user is not a string`);
+		}
+		// Get and validate the session.
+		const session = data.session;
+		if (typeof session !== 'string') {
+			throw new Error(`data.session is not a string`);
+		}
+		// Get the data record.
+		const dataRecord = await this._data.get({ table: 'auth', id: user });
+		if (dataRecord === undefined) {
+			return false;
+		}
+		// If it is a valid session,
+		if (session !== dataRecord[AuthRecord.SESSION]) {
+			// They didn't match, so remove it to the unauthenticated sessions.
+			this._authenticatedSessions.delete(ws);
+			this._unauthenticatedSessions.add(ws);
+			return false;
+		}
+		this._unauthenticatedSessions.delete(ws);
+		this._authenticatedSessions.add(ws);
+		return true;
 	}
 
 	/** Checks if the web socket has been authenticated. This is called by every get/set request. */
@@ -130,13 +149,19 @@ export class Auth {
 		};
 	}
 
+	/** Creates some cryptographically secure random digits of the given length. */
 	private _randomDigits(length: number): string {
 		return Crypto.randomBytes(Math.ceil(length / 2))
 			.toString('hex') // Convert to hexadecimal format.
 			.slice(0, length); // Return required number of characters.
 	}
 
+	/** A reference to the data class. */
 	private _data: Data;
+
+	/** The list of websocket connections that have been authenticated. */
 	private _authenticatedSessions: Set<WS> = new Set();
+
+	/** The list of websocket connections that have not yet been authenticated. */
 	private _unauthenticatedSessions: Set<WS> = new Set();
 }
