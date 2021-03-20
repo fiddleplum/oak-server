@@ -2,7 +2,7 @@ import * as WS from 'ws';
 import * as Crypto from 'crypto';
 import { Data } from './data';
 import { Config } from 'config';
-import { JSONObject } from 'elm-app';
+import { JSONObject } from 'pine-lib';
 
 enum AuthRecord { USER, PASSWORD_HASH, SALT, SESSION }
 

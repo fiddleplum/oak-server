@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as WS from 'ws';
 import * as https from 'https';
-import { JSONType } from 'elm-app';
+import { JSONType } from 'pine-lib';
 import { Config } from './config';
 import { Data } from './data';
 import { Auth } from './auth';

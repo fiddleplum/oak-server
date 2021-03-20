@@ -6,7 +6,7 @@
 	"scripts": {
 		"setup": "yarn install",
 		"update": "yarn install --no-default-rc",
-		"start": "tsc; node dist/oak-server/src"
+		"start": "tsc; ts-node -r tsconfig-paths/register dist/oak-server/src"
 	},
 	"repository": {
 		"type": "git",
@@ -28,6 +28,8 @@
 		"@types/node": "latest",
 		"@types/ws": "latest",
 		"ts-loader": "latest",
+		"ts-node": "latest",
+		"tsconfig-paths": "latest",
 		"typescript": "latest"
 	}
 }

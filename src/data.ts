@@ -1,6 +1,6 @@
 import { Config, FieldType } from './config';
 import * as fs from 'fs';
-import { JSONObject, Sort } from 'elm-app';
+import { JSONObject, Sort } from 'pine-lib';
 
 export class Data {
 	constructor(config: Config, folder: string) {
@@ -78,6 +78,7 @@ export class Data {
 		if (tableConfig.binningFunctionBody !== undefined) {
 			throw new Error(`Listing results doesn't work with table ${table}, which has a binning function.`);
 		}
+		// Get this-bound functions used in the searching below.
 		const isDataRecordIdLessBound = this.isDataRecordIdLess.bind(this, tableConfig.indexOfId);
 		const isDataRecordValueEqualBound = this.isDataRecordValueEqual.bind(this, tableConfig.indexOfId);
 		// Get the data file. Since there is no binning method, any id (0) will do.
@@ -90,6 +91,10 @@ export class Data {
 		const filterOrs = data.filter;
 		if (!Array.isArray(filterOrs)) {
 			throw new Error('data.filter must be an array.');
+		}
+		// If there are no filters, return everything.
+		if (filterOrs.length === 0) {
+			return cache.dataRecords;
 		}
 		// Go through each OR filter set.
 		const resultOfOrs: DataRecord[] = [];
@@ -479,7 +484,7 @@ class Cache {
 }
 
 /** A filter option. */
-interface Filter {
+interface _Filter {
 	/** The name of the field to be checked. */
 	fieldName: string;
 
