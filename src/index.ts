@@ -112,6 +112,13 @@ export class Server {
 					data: dataRecord
 				}, id, ws);
 			}
+			else if (command === 'list') {
+				const dataRecords = await this._data.list(data);
+				this.sendResponse({
+					success: true,
+					data: dataRecords
+				}, id, ws);
+			}
 			else if (command === 'set') {
 				await this._data.set(data);
 				this.sendResponse({

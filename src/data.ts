@@ -1,6 +1,6 @@
 import { Config, FieldType } from './config';
 import * as fs from 'fs';
-import { JSONObject } from 'elm-app';
+import { JSONObject, Sort } from 'elm-app';
 
 export class Data {
 	constructor(config: Config, folder: string) {
@@ -51,12 +51,19 @@ export class Data {
 		}, 5000);
 	}
 
-	/** Gets a list of data records given the filter parameters.
+	/** Gets a list of data records given filter parameters.
 	 *  The first dimension of filters are ORed together and the second dimension are ANDed together.
-	 *  So A || (B && C) would be [[A], [B, C]].
-	 *  Returns a promise that resolves with the array when they are loaded,
-	 *  or an empty array if no match was found. */
-	async getFiltered(data: JSONObject, _filters: Filter[][]): Promise<DataRecord[]> {
+	 *  So A || (B && C) would be [[A], [B, C]]. It returns a promise that resolves with the array
+	 *  when they are loaded, or an empty array if no match was found. The format of each filter is
+	 *  described in the Filter interface. The data format is:
+	 *  ```
+	 *  {
+	 *    table: string, // name of the table
+	 *    filter: Filter[][] // the filter, [] means get all data records
+	 *  }
+	 *  ```
+	 */
+	async list(data: JSONObject): Promise<DataRecord[]> {
 		// Get and validate the table.
 		const table = data.table;
 		if (typeof table !== 'string') {
@@ -69,17 +76,127 @@ export class Data {
 		}
 		// Make sure the table isn't binned.
 		if (tableConfig.binningFunctionBody !== undefined) {
-			throw new Error(`Getting filtered results doesn't work with table ${table}, which has a binning function.`);
+			throw new Error(`Listing results doesn't work with table ${table}, which has a binning function.`);
 		}
+		const isDataRecordIdLessBound = this.isDataRecordIdLess.bind(this, tableConfig.indexOfId);
+		const isDataRecordValueEqualBound = this.isDataRecordValueEqual.bind(this, tableConfig.indexOfId);
 		// Get the data file. Since there is no binning method, any id (0) will do.
-		const results: DataRecord[] = [];
 		const cache = await this._loadCache(table, 0, false);
 		if (cache === undefined) {
-			return results;
+			// There are no records, so return nothing.
+			return [];
 		}
-		// for (let i = 0, l = cache.dataRecords.length; i < l; i++) {
-		// }
-		return results;
+		// Get and validate the filters.
+		const filterOrs = data.filter;
+		if (!Array.isArray(filterOrs)) {
+			throw new Error('data.filter must be an array.');
+		}
+		// Go through each OR filter set.
+		const resultOfOrs: DataRecord[] = [];
+		for (let i = 0, l = filterOrs.length; i < l; i++) {
+			const filterAnds = filterOrs[i];
+			if (!Array.isArray(filterAnds)) {
+				throw new Error(`data.filter[${i}] must be any array.`);
+			}
+			const resultOfAnds = cache.dataRecords.splice(0);
+			// Go through each AND filter set.
+			for (let j = 0, m = filterAnds.length; j < m; j++) {
+				const filter = filterAnds[j];
+				if (typeof filter !== 'object' || filter === null || Array.isArray(filter)) {
+					throw new Error(`data.filter[${i}][${j}] must be an object.`);
+				}
+				// Get the field name.
+				const fieldName = filter.fieldName;
+				if (typeof fieldName !== 'string') {
+					throw new Error(`data.filter[${i}][${j}].fieldName must be a string.`);
+				}
+				// Get the field index.
+				let fieldIndex;
+				for (let k = 0, n = tableConfig.fields.length; k < n; k++) {
+					if (tableConfig.fields[k]!.name === fieldName) {
+						fieldIndex = k;
+					}
+				}
+				if (fieldIndex === undefined) {
+					throw new Error(`data.filter[${i}][${j}].fieldName of ${table}.${fieldName} is an invalid field name.`);
+				}
+				// Get the neg flag.
+				let neg = false;
+				if (filter.neg !== undefined) {
+					if (typeof filter.neg !== 'boolean') {
+						throw new Error(`data.filter[${i}][${j}].neg must be a boolean.`);
+					}
+					neg = filter.neg;
+				}
+				// Depending on the filter type, filter the AND groups.
+				const fieldConfig = tableConfig.fields[fieldIndex]!;
+				if (filter.range !== undefined) {
+					const range = filter.range;
+					if (!Array.isArray(range) || range.length !== 2 || typeof range[0] !== 'number' || typeof range[1] !== 'number') {
+						throw new Error(`data.filter[${i}][${j}].range must be an array of two numbers, min and max.`);
+					}
+					if (fieldConfig.type !== 'number') {
+						throw new Error(`data.filter[${i}][${j}].range is used, but ${table}.${fieldName} is not a number.`);
+					}
+					for (let k = 0, n = resultOfAnds.length; k < n; k++) {
+						const dataRecord = resultOfAnds[k];
+						const fieldValue = dataRecord[fieldIndex] as number;
+						const match = range[0] <= fieldValue && fieldValue <= range[1];
+						if (match ? neg : !neg) {
+							resultOfAnds.splice(k, 1);
+							k--;
+						}
+					}
+				}
+				else if (filter.regex !== undefined) {
+					const regex = filter.regex;
+					if (typeof regex !== 'string') {
+						throw new Error(`data.filter[${i}][${j}].regex must be a string.`);
+					}
+					if (fieldConfig.type !== 'string') {
+						throw new Error(`data.filter[${i}][${j}].regex is used, but ${table}.${fieldName} is not a string.`);
+					}
+					try {
+						const regexObject = /${regex}/;
+						for (let k = 0, n = resultOfAnds.length; k < n; k++) {
+							const dataRecord = resultOfAnds[k];
+							const fieldValue = dataRecord[fieldIndex] as string;
+							const match = regexObject.test(fieldValue);
+							if (match ? neg : !neg) {
+								resultOfAnds.splice(k, 1);
+								k--;
+							}
+						}
+					}
+					catch (error) {
+						throw new Error(`data.filter[${i}][${j}].regex is an invalid regular expression: ${error}`);
+					}
+				}
+				else if (filter.flag !== undefined) {
+					const flag = filter.flag;
+					if (typeof flag !== 'boolean') {
+						throw new Error(`data.filter[${i}][${j}].flag must be a boolean.`);
+					}
+					if (fieldConfig.type !== 'boolean') {
+						throw new Error(`data.filter[${i}][${j}].flag is used, but ${table}.${fieldName} is not a boolean.`);
+					}
+					for (let k = 0, n = resultOfAnds.length; k < n; k++) {
+						const dataRecord = resultOfAnds[k];
+						const fieldValue = dataRecord[fieldIndex] as boolean;
+						const match = fieldValue === flag;
+						if (match ? neg : !neg) {
+							resultOfAnds.splice(k, 1);
+							k--;
+						}
+					}
+				}
+			}
+			// Union the resultOfAnds to the resultOfOrs.
+			for (let j = 0, m = resultOfAnds.length; j < m; j++) {
+				Sort.addIfUnique(resultOfAnds[j], resultOfOrs, isDataRecordIdLessBound, isDataRecordValueEqualBound);
+			}
+		}
+		return resultOfOrs;
 	}
 
 	/** Gets a data record. Returns a promise that resolves with the data record when it is loaded,
@@ -230,21 +347,11 @@ export class Data {
 		}
 		return this._loadCache(table, id, createCacheIfNotFound).then((cache: Cache | undefined) => {
 			if (cache !== undefined) {
-				let low = 0;
-				let high = cache.dataRecords.length;
-				while (low < high) {
-					const mid = (low + high) >>> 1;
-					if (cache.dataRecords[mid][indexOfId] < id) {
-						low = mid + 1;
-					}
-					else {
-						high = mid;
-					}
-				}
+				const index = this.getIndexOfDataRecord(id, cache.dataRecords, indexOfId);
 				return {
 					cache: cache,
-					index: low,
-					found: (low < cache.dataRecords.length && cache.dataRecords[low][indexOfId] === id)
+					index: index,
+					found: (index < cache.dataRecords.length && cache.dataRecords[index][indexOfId] === id)
 				};
 			}
 			else {
@@ -255,6 +362,22 @@ export class Data {
 				};
 			}
 		});
+	}
+
+	/** Gets the least index of the data records that is greater than or equal to the id, or the
+	 *  last index if all ids are less. */
+	private getIndexOfDataRecord(id: FieldType, dataRecords: DataRecord[], indexOfId: number): number {
+		return Sort.getIndex(id, dataRecords, this.isDataRecordIdLess.bind(this, indexOfId));
+	}
+
+	/** Returns true if the data record's id is less than the rhs. */
+	private isDataRecordIdLess(indexOfId: number, lhs: DataRecord, id: FieldType): boolean {
+		return lhs[indexOfId] < id;
+	}
+
+	/** Returns true if the data record's id equals the rhs. */
+	private isDataRecordValueEqual(indexOfId: number, lhs: DataRecord, rhs: DataRecord): boolean {
+		return lhs[indexOfId] === rhs[indexOfId];
 	}
 
 	/** Loads a data file into the cache. Returns a promise that resolves with the cache when
