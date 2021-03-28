@@ -8,6 +8,7 @@ When a WS connection is opened, it exists only in a single browser tab and brows
 This means that authentication is only required when the page is opened.
 */
 
+/** The format of the users data. */
 interface UserData extends JSONObject {
 	passwordHash: string,
 	salt: string,
@@ -21,6 +22,12 @@ export class Users extends Module {
 	process(command: string, params: JSONObject, ws: WS): Promise<JSONType | void> {
 		if (command === 'createUser') {
 			return this.createUser(params, ws);
+		}
+		else if (command === 'deleteUser') {
+			return this.deleteUser(params, ws);
+		}
+		else if (command === 'changePassword') {
+			return this.changePassword(params, ws);
 		}
 		else if (command === 'login') {
 			return this.login(params, ws);
@@ -55,7 +62,7 @@ export class Users extends Module {
 		return userData.groups;
 	}
 
-	/** Create a user. */
+	/** Creates a user. */
 	async createUser(params: JSONObject, ws: WS): Promise<void> {
 		if (!(await this.getGroups(this.getUser(ws))).includes('admins')) {
 			throw new Error('You have insufficient permissions to create a user.');
@@ -92,7 +99,80 @@ export class Users extends Module {
 			groups: ['users'] });
 	}
 
-	/** User login. */
+	/** Deletes a user. */
+	async deleteUser(params: JSONObject, ws: WS): Promise<void> {
+		// Get and validate the password.
+		const password = params.password;
+		if (typeof password !== 'string') {
+			throw new Error(`params.password is not a string.`);
+		}
+		// Get and validate the user.
+		const user = this._authenticatedSessions.get(ws);
+		if (user === undefined) {
+			throw new Error(`The user is not logged in.`);
+		}
+		// Get the data record.
+		const data = await this.server.data.get(`users/${user}`) as UserData | undefined;
+		if (data === undefined) {
+			throw new Error(`No user was found.`);
+		}
+		// Create the hash.
+		const hash = Crypto.createHmac('sha512', data.salt);
+		// Compute the hashed given password.
+		const passwordHash = hash.update(password).digest('hex');
+		// Compare the passwords.
+		if (passwordHash !== data.passwordHash && (password !== '' || data.passwordHash !== '')) {
+			throw new Error(`Invalid password.`);
+		}
+		await this.server.data.delete(`users/${user}`);
+	}
+
+	/** Changes a password. */
+	async changePassword(params: JSONObject, ws: WS): Promise<void> {
+		// Get and validate the oldP password.
+		const oldPassword = params.oldPassword;
+		if (typeof oldPassword !== 'string') {
+			throw new Error(`params.oldPassword is not a string`);
+		}
+		// Get and validate the new password.
+		const newPassword = params.newPassword;
+		if (typeof newPassword !== 'string') {
+			throw new Error(`params.newPassword is not a string`);
+		}
+		if (newPassword.length < 8) {
+			throw new Error(`The password must be at least 8 characters.`);
+		}
+		// Get and validate the user.
+		const user = this._authenticatedSessions.get(ws);
+		if (user === undefined) {
+			throw new Error(`The user is not logged in.`);
+		}
+		// Get the data record.
+		const data = await this.server.data.get(`users/${user}`) as UserData | undefined;
+		if (data === undefined) {
+			throw new Error(`No user was found.`);
+		}
+		// Create the old hash.
+		const oldHash = Crypto.createHmac('sha512', data.salt);
+		// Compute the hashed given old password.
+		const oldPasswordHash = oldHash.update(oldPassword).digest('hex');
+		// Compare the passwords.
+		if (oldPasswordHash !== data.passwordHash && (oldPassword !== '' || data.passwordHash !== '')) {
+			throw new Error(`Invalid old password.`);
+		}
+		// Create the salt.
+		const salt = this._randomDigits(16);
+		// Create the hash.
+		const hash = Crypto.createHmac('sha512', salt);
+		// Create the hashed new password.
+		const newPasswordHash = hash.update(newPassword).digest('hex');
+		// Update the data.
+		data.salt = salt;
+		data.passwordHash = newPasswordHash;
+		await this.server.data.set(`users/${user}`, data);
+	}
+
+	/** Logs in a user. */
 	async login(params: JSONObject, ws: WS): Promise<string> {
 		// Get and validate the user.
 		const user = params.user;
@@ -113,7 +193,7 @@ export class Users extends Module {
 		const hash = Crypto.createHmac('sha512', data.salt);
 		// Compute the hashed given password.
 		const passwordHash = hash.update(password).digest('hex');
-		console.log(password + ' ' + passwordHash + ' ' + data.passwordHash);
+		// Compare the passwords.
 		if (passwordHash !== data.passwordHash && (password !== '' || data.passwordHash !== '')) {
 			throw new Error(`Invalid username or password.`);
 		}
@@ -128,8 +208,8 @@ export class Users extends Module {
 	}
 
 	/** Authenticates a web socket from a username and session token. */
-	async authenticate(params: JSONObject, ws: WS): Promise<boolean> {
-		// Get and validate the user.
+	async authenticate(params: JSONObject, ws: WS): Promise<void> {
+		// Get and validate the session.
 		const user = params.user;
 		if (typeof user !== 'string') {
 			throw new Error(`params.user is not a string.`);
@@ -139,49 +219,19 @@ export class Users extends Module {
 		if (typeof session !== 'string') {
 			throw new Error(`params.session is not a string.`);
 		}
-		// Get the data record.
+		// If not, get the data record.
 		const userData = await this.server.data.get(`users/${user}`) as UserData | undefined;
 		if (userData === undefined) {
-			return false;
+			throw new Error(`User not logged in`);
 		}
-		// If it is a valid session,
+		// Check if it is a valid session.
 		if (session !== userData.session) {
 			// They didn't match, so remove it to the unauthenticated sessions.
 			this._authenticatedSessions.delete(ws);
-			return false;
+			throw new Error(`User not logged in`);
 		}
 		this._authenticatedSessions.set(ws, user);
-		return true;
 	}
-
-	// /** Returns the user if the web socket has been authenticated, or undefined if the web socket
-	//  *  is not authenticated. */
-	// getAuthenticatedUser(ws: WS): string | undefined {
-	// 	return this._authenticatedSessions.get(ws);
-	// }
-
-	// /** Adds the auth table to the config so that the Data class is happy when using the table. */
-	// static setAuthTable(config: Config): void {
-	// 	if (config.tables.auth !== undefined) {
-	// 		throw new Error('Cannot define table "auth" in the configuration.');
-	// 	}
-	// 	config.tables.auth = {
-	// 		'indexOfId': 0,
-	// 		'fields': [{
-	// 			'name': 'user',
-	// 			'type': 'string'
-	// 		}, {
-	// 			'name': 'passwordHash',
-	// 			'type': 'string'
-	// 		}, {
-	// 			'name': 'session',
-	// 			'type': 'string'
-	// 		}, {
-	// 			'name': 'salt',
-	// 			'type': 'string'
-	// 		}]
-	// 	};
-	// }
 
 	/** Creates some cryptographically secure random digits of the given length. */
 	private _randomDigits(length: number): string {

@@ -185,25 +185,6 @@ export class Server {
 			// 	// data.size();
 			// 	// success = true;
 			// }
-			// else if (command === 'create user') {
-			// 	await this._auth.createUser(data);
-			// 	this.sendResponse({
-			// 		success: true
-			// 	}, id, ws);
-			// }
-			// else if (command === 'login') {
-			// 	const session = await this._auth.login(data, ws);
-			// 	this.sendResponse({
-			// 		success: true,
-			// 		session: session
-			// 	}, id, ws);
-			// }
-			// else if (command === 'authenticate') {
-			// 	await this._auth.authenticate(data, ws);
-			// 	this.sendResponse({
-			// 		success: true
-			// 	}, id, ws);
-			// }
 			// else {
 			// 	throw new Error('Invalid command "' + command + '".');
 			// }
