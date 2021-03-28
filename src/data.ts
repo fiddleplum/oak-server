@@ -57,6 +57,16 @@ export class Data {
 		return cache.data;
 	}
 
+	/** Lists the names at the path. Non recursive. */
+	async list(path: string): Promise<string[]> {
+		const filenames = await FS.promises.readdir(`${this._folder}/${path}`);
+		const paths: string[] = [];
+		for (const filename of filenames) {
+			paths.push(Path.basename(filename, '.json'));
+		}
+		return paths;
+	}
+
 	/** Sets data to a path. */
 	async set(path: string, data: JSONType): Promise<void> {
 		// Clean the path.
@@ -76,6 +86,8 @@ export class Data {
 		cache.lastAccess = Date.now();
 		cache.data = JSON.parse(JSON.stringify(data));
 		cache.dirty = true;
+		// Needs to be saved immediately because the list path may need this file name.
+		this._saveCache(path, cache);
 	}
 
 	/** Deletes the data at a path. */
@@ -88,10 +100,13 @@ export class Data {
 			if (cache.status === 'loading') {
 				await cache.loadingPromise;
 			}
+			// Delete it from the cache.
 			this._caches.delete(path);
 		}
+		// Delete it from the file system.
 		const filename = `${this._folder}/${path}.json`;
 		await FS.promises.unlink(filename);
+		// Go through any empty parent folders and delete them until the top.
 		let dir = Path.dirname(filename);
 		while (true) {
 			if (dir === this._folder) {

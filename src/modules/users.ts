@@ -20,8 +20,17 @@ interface UserData extends JSONObject {
 export class Users extends Module {
 	/** Processes a command. */
 	process(command: string, params: JSONObject, ws: WS): Promise<JSONType | void> {
-		if (command === 'createUser') {
-			return this.createUser(params, ws);
+		if (command === 'createUserAdmin') {
+			return this.createUserAdmin(params, ws);
+		}
+		else if (command === 'deleteUserAdmin') {
+			return this.deleteUserAdmin(params, ws);
+		}
+		else if (command === 'changePasswordAdmin') {
+			return this.changePasswordAdmin(params, ws);
+		}
+		else if (command === 'listUsersAdmin') {
+			return this.listUsersAdmin(ws);
 		}
 		else if (command === 'deleteUser') {
 			return this.deleteUser(params, ws);
@@ -34,6 +43,9 @@ export class Users extends Module {
 		}
 		else if (command === 'authenticate') {
 			return this.authenticate(params, ws);
+		}
+		else if (command === 'getGroups') {
+			return this.getGroups(ws);
 		}
 		else {
 			throw new Error(`Invalid ${this.constructor.name} command "${command}".`);
@@ -50,21 +62,10 @@ export class Users extends Module {
 		return this._authenticatedSessions.get(ws);
 	}
 
-	/** Gets the groups that a user is part of. */
-	async getGroups(user: string | undefined): Promise<string[]> {
-		if (user === undefined) {
-			return [];
-		}
-		const userData = await this.server.data.get(`users/${user}`) as (UserData | undefined);
-		if (userData === undefined) {
-			return [];
-		}
-		return userData.groups;
-	}
-
-	/** Creates a user. */
-	async createUser(params: JSONObject, ws: WS): Promise<void> {
-		if (!(await this.getGroups(this.getUser(ws))).includes('admins')) {
+	/** Creates a user with admin permissions. */
+	async createUserAdmin(params: JSONObject, ws: WS): Promise<void> {
+		// Verify that the self is admin.
+		if (!(await this.getGroups(ws)).includes('admins')) {
 			throw new Error('You have insufficient permissions to create a user.');
 		}
 		// Get and validate the user.
@@ -79,6 +80,16 @@ export class Users extends Module {
 		}
 		if (password.length < 8) {
 			throw new Error(`The password must be at least 8 characters.`);
+		}
+		// Get the groups.
+		const groups = params.groups;
+		if (!Array.isArray(groups)) {
+			throw new Error(`params.groups is not an array.`);
+		}
+		for (let i = 0, l = groups.length; i < l; i++) {
+			if (typeof groups[i] !== 'string') {
+				throw new Error(`params.groups[${i}] is not a string.`);
+			}
 		}
 		// Get the data record.
 		const existingUserData = await this.server.data.get(`users/${user}`);
@@ -96,7 +107,84 @@ export class Users extends Module {
 			passwordHash: passwordHash,
 			salt: salt,
 			session: '',
-			groups: ['users'] });
+			groups: groups });
+	}
+
+	/** Deletes a user with admin permissions. */
+	async deleteUserAdmin(params: JSONObject, ws: WS): Promise<void> {
+		// Verify that the self is admin.
+		if (!(await this.getGroups(ws)).includes('admins')) {
+			throw new Error('You have insufficient permissions to delete a user.');
+		}
+		// Get and validate the user.
+		const user = params.user;
+		if (user !== undefined) {
+			if (typeof user !== 'string') {
+				throw new Error(`params.user is not a string.`);
+			}
+		}
+		// Delete the user.
+		await this.server.data.delete(`users/${user}`);
+	}
+
+	/** Changes a password with admin permissions. */
+	async changePasswordAdmin(params: JSONObject, ws: WS): Promise<void> {
+		// Verify that the self is admin.
+		if (!(await this.getGroups(ws)).includes('admins')) {
+			throw new Error('You have insufficient permissions to change the password of a user.');
+		}
+		// Get and validate the user.
+		const user = params.user;
+		if (user !== undefined) {
+			if (typeof user !== 'string') {
+				throw new Error(`params.user is not a string.`);
+			}
+		}
+		// Get and validate the new password.
+		const newPassword = params.newPassword;
+		if (typeof newPassword !== 'string') {
+			throw new Error(`params.newPassword is not a string`);
+		}
+		if (newPassword.length < 8) {
+			throw new Error(`The new password must be at least 8 characters.`);
+		}
+		// Get the data record.
+		const userData = await this.server.data.get(`users/${user}`) as UserData | undefined;
+		if (userData === undefined) {
+			throw new Error(`No user was found.`);
+		}
+		// Create the salt.
+		const salt = this._randomDigits(16);
+		// Create the hash.
+		const hash = Crypto.createHmac('sha512', salt);
+		// Create the hashed new password.
+		const newPasswordHash = hash.update(newPassword).digest('hex');
+		// Update the data.
+		userData.salt = salt;
+		userData.passwordHash = newPasswordHash;
+		await this.server.data.set(`users/${user}`, userData);
+	}
+
+	/** Lists the users. */
+	async listUsersAdmin(ws: WS): Promise<string[]> {
+		// Verify that the self is admin.
+		if (!(await this.getGroups(ws)).includes('admins')) {
+			throw new Error('You have insufficient permissions to change the password of a user.');
+		}
+		return this.server.data.list(`users`);
+	}
+
+	/** Gets the groups that a user is part of. */
+	async getGroups(ws: WS): Promise<string[]> {
+		const user = this.getUser(ws);
+		if (user === undefined) {
+			return [];
+		}
+		const userData = await this.server.data.get(`users/${user}`) as (UserData | undefined);
+		if (userData === undefined) {
+			return [];
+		}
+		return userData.groups;
 	}
 
 	/** Deletes a user. */
@@ -107,29 +195,30 @@ export class Users extends Module {
 			throw new Error(`params.password is not a string.`);
 		}
 		// Get and validate the user.
-		const user = this._authenticatedSessions.get(ws);
+		const user = this.getUser(ws);
 		if (user === undefined) {
 			throw new Error(`The user is not logged in.`);
 		}
 		// Get the data record.
-		const data = await this.server.data.get(`users/${user}`) as UserData | undefined;
-		if (data === undefined) {
+		const userData = await this.server.data.get(`users/${user}`) as UserData | undefined;
+		if (userData === undefined) {
 			throw new Error(`No user was found.`);
 		}
 		// Create the hash.
-		const hash = Crypto.createHmac('sha512', data.salt);
+		const hash = Crypto.createHmac('sha512', userData.salt);
 		// Compute the hashed given password.
 		const passwordHash = hash.update(password).digest('hex');
 		// Compare the passwords.
-		if (passwordHash !== data.passwordHash && (password !== '' || data.passwordHash !== '')) {
+		if (passwordHash !== userData.passwordHash && (password !== '' || userData.passwordHash !== '')) {
 			throw new Error(`Invalid password.`);
 		}
+		// Delete the user.
 		await this.server.data.delete(`users/${user}`);
 	}
 
 	/** Changes a password. */
 	async changePassword(params: JSONObject, ws: WS): Promise<void> {
-		// Get and validate the oldP password.
+		// Get and validate the old password.
 		const oldPassword = params.oldPassword;
 		if (typeof oldPassword !== 'string') {
 			throw new Error(`params.oldPassword is not a string`);
@@ -140,24 +229,24 @@ export class Users extends Module {
 			throw new Error(`params.newPassword is not a string`);
 		}
 		if (newPassword.length < 8) {
-			throw new Error(`The password must be at least 8 characters.`);
+			throw new Error(`The new password must be at least 8 characters.`);
 		}
 		// Get and validate the user.
-		const user = this._authenticatedSessions.get(ws);
+		const user = this.getUser(ws);
 		if (user === undefined) {
 			throw new Error(`The user is not logged in.`);
 		}
 		// Get the data record.
-		const data = await this.server.data.get(`users/${user}`) as UserData | undefined;
-		if (data === undefined) {
+		const userData = await this.server.data.get(`users/${user}`) as UserData | undefined;
+		if (userData === undefined) {
 			throw new Error(`No user was found.`);
 		}
 		// Create the old hash.
-		const oldHash = Crypto.createHmac('sha512', data.salt);
+		const oldHash = Crypto.createHmac('sha512', userData.salt);
 		// Compute the hashed given old password.
 		const oldPasswordHash = oldHash.update(oldPassword).digest('hex');
 		// Compare the passwords.
-		if (oldPasswordHash !== data.passwordHash && (oldPassword !== '' || data.passwordHash !== '')) {
+		if (oldPasswordHash !== userData.passwordHash && (oldPassword !== '' || userData.passwordHash !== '')) {
 			throw new Error(`Invalid old password.`);
 		}
 		// Create the salt.
@@ -167,9 +256,9 @@ export class Users extends Module {
 		// Create the hashed new password.
 		const newPasswordHash = hash.update(newPassword).digest('hex');
 		// Update the data.
-		data.salt = salt;
-		data.passwordHash = newPasswordHash;
-		await this.server.data.set(`users/${user}`, data);
+		userData.salt = salt;
+		userData.passwordHash = newPasswordHash;
+		await this.server.data.set(`users/${user}`, userData);
 	}
 
 	/** Logs in a user. */
@@ -185,22 +274,22 @@ export class Users extends Module {
 			throw new Error(`params.password is not a string`);
 		}
 		// Get the data record.
-		const data = await this.server.data.get(`users/${user}`) as UserData | undefined;
-		if (data === undefined) {
+		const userData = await this.server.data.get(`users/${user}`) as UserData | undefined;
+		if (userData === undefined) {
 			throw new Error(`Invalid username or password.`);
 		}
 		// Create the hash.
-		const hash = Crypto.createHmac('sha512', data.salt);
+		const hash = Crypto.createHmac('sha512', userData.salt);
 		// Compute the hashed given password.
 		const passwordHash = hash.update(password).digest('hex');
 		// Compare the passwords.
-		if (passwordHash !== data.passwordHash && (password !== '' || data.passwordHash !== '')) {
+		if (passwordHash !== userData.passwordHash && (password !== '' || userData.passwordHash !== '')) {
 			throw new Error(`Invalid username or password.`);
 		}
 		// Create the session id.
 		const session = this._randomDigits(16);
-		data.session = session;
-		await this.server.data.set(`users/${user}`, data);
+		userData.session = session;
+		await this.server.data.set(`users/${user}`, userData);
 		// Add it to the sessions arrays.
 		this._authenticatedSessions.set(ws, user);
 		// Return the session id.

@@ -127,10 +127,13 @@ export class Server {
 				throw new Error('Request.data.command must be a string.');
 			}
 
-			// Get the params of the command.
-			const params = data.params;
-			if (typeof params !== 'object' || params === null || Array.isArray(params)) {
-				throw new Error('Request.data must be an object.');
+			// Get the params of the command, if any.
+			let params = data.params;
+			if (params !== undefined && (typeof params !== 'object' || params === null || Array.isArray(params))) {
+				throw new Error('Request.data.params must be an object or undefined.');
+			}
+			if (params === undefined) {
+				params = {};
 			}
 
 			// Get the module.
