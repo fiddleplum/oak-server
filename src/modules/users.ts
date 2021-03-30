@@ -8,7 +8,7 @@ When a WS connection is opened, it exists only in a single browser tab and brows
 This means that authentication is only required when the page is opened.
 */
 
-/** The format of the users data. */
+/** The format of the data. */
 interface UserData extends JSONObject {
 	passwordHash: string,
 	salt: string,

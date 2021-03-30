@@ -1,11 +1,13 @@
 import * as fs from 'fs';
 import * as WS from 'ws';
 import * as https from 'https';
-import { JSONObject, JSONType } from 'pine-lib';
+import { JSONType } from 'pine-lib';
 import { Config } from './config';
 import { Data } from './data';
+
+import { Module } from './modules/module';
 import { Users } from './modules/users';
-import { Module } from 'modules/module';
+import { SunAlarm } from './modules/sun-alarm';
 
 export class Server {
 	constructor() {
@@ -34,6 +36,7 @@ export class Server {
 
 		// Setup the modules.
 		this._modules.set('users', new Users(this));
+		this._modules.set('sun-alarm', new SunAlarm(this));
 
 		// Start the HTTPS and WebSocket servers.
 		const key  = fs.readFileSync('key.pem', 'utf8');
