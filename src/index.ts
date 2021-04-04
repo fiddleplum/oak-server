@@ -6,8 +6,8 @@ import { Config } from './config';
 import { Data } from './data';
 
 import { Module } from './modules/module';
-import { Users } from './modules/users';
-import { SunAlarm } from './modules/sun-alarm';
+import { UsersModule } from './modules/users-module';
+import { SunAlarmModule } from './modules/sun-alarm-module';
 
 export class Server {
 	constructor() {
@@ -35,8 +35,8 @@ export class Server {
 		this._data = new Data(dataFolderPath);
 
 		// Setup the modules.
-		this._modules.set('users', new Users(this));
-		this._modules.set('sun-alarm', new SunAlarm(this));
+		this._modules.set('users', new UsersModule(this));
+		this._modules.set('sun-alarm', new SunAlarmModule(this));
 
 		// Start the HTTPS and WebSocket servers.
 		const key  = fs.readFileSync('key.pem', 'utf8');
@@ -78,8 +78,8 @@ export class Server {
 	}
 
 	/** Gets the built-in users module. */
-	get users(): Users {
-		return this._modules.get('users') as Users;
+	get users(): UsersModule {
+		return this._modules.get('users') as UsersModule;
 	}
 
 	/** Gets a module by name. */

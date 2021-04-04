@@ -17,7 +17,7 @@ interface UserData extends JSONObject {
 }
 
 /** A class for handling everything about users. */
-export class Users extends Module {
+export class UsersModule extends Module {
 	/** Processes a command. */
 	process(command: string, params: JSONObject, ws: WS): Promise<JSONType | void> {
 		if (command === 'createUserAdmin') {

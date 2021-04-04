@@ -12,7 +12,8 @@
 		"sourceMap": true,
 		"baseUrl": "src",
 		"paths": {
-			"pine-lib": [ "../../pine-lib/src/index" ]
+			"pine-lib": [ "../../pine-lib/src/index" ],
+			"cedar-desk-types": [ "../../cedar-desk/src/types/index" ]
 		}
 	},
 	"include": [
