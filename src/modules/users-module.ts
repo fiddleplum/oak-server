@@ -2,6 +2,7 @@ import * as WS from 'ws';
 import * as Crypto from 'crypto';
 import { JSONObject, JSONType } from 'pine-lib';
 import { Module } from './module';
+import { Server } from '../index';
 
 /*
 When a WS connection is opened, it exists only in a single browser tab and browser session.
@@ -18,6 +19,20 @@ interface UserData extends JSONObject {
 
 /** A class for handling everything about users. */
 export class UsersModule extends Module {
+	constructor(server: Server) {
+		super(server);
+
+		server.data.get('users/admin').then((value) => {
+			if (value === undefined) {
+				server.data.set('users/admin', {
+					passwordHash: '',
+					salt: '',
+					session: '',
+					groups: ['admins'] });
+			}
+		});
+	}
+
 	/** Processes a command. */
 	process(command: string, params: JSONObject, ws: WS): Promise<JSONType | void> {
 		if (command === 'createUserAdmin') {

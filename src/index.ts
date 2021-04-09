@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as WS from 'ws';
 import * as https from 'https';
 import { JSONType } from 'pine-lib';
-import { Config } from './config';
 import { Data } from './data';
 
 import { Module } from './modules/module';
@@ -13,23 +12,22 @@ export class Server {
 	constructor() {
 		// Get the command-line parameters.
 		const args: string[] = process.argv.slice(2);
-		if (args.length < 2) {
-			throw new Error('Usage: node . <config file path> <data folder path>.');
+		if (args.length < 1) {
+			throw new Error('Usage: node . <data folder path>.');
 		}
-		const configFilePath = args[0];
-		const dataFolderPath = args[1];
+		const dataFolderPath = args[0];
 
 		console.log('Starting up...');
 		console.log();
 
-		// Get the config.
-		const configFileData = fs.readFileSync(configFilePath);
-		const config: Config = JSON.parse(configFileData.toString('utf-8'));
+		// // Get the config.
+		// const configFileData = fs.readFileSync(configFilePath);
+		// const config: Config = JSON.parse(configFileData.toString('utf-8'));
 
-		// Print the config.
-		console.log('The configuration is:');
-		console.log(JSON.stringify(config));
-		console.log();
+		// // Print the config.
+		// console.log('The configuration is:');
+		// console.log(JSON.stringify(config));
+		// console.log();
 
 		// Startup the data object.
 		this._data = new Data(dataFolderPath);
