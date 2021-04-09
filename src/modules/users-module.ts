@@ -133,10 +133,8 @@ export class UsersModule extends Module {
 		}
 		// Get and validate the user.
 		const user = params.user;
-		if (user !== undefined) {
-			if (typeof user !== 'string') {
-				throw new Error(`params.user is not a string.`);
-			}
+		if (typeof user !== 'string') {
+			throw new Error(`params.user is not a string.`);
 		}
 		// Delete the user.
 		await this.server.data.delete(`users/${user}`);
@@ -150,10 +148,8 @@ export class UsersModule extends Module {
 		}
 		// Get and validate the user.
 		const user = params.user;
-		if (user !== undefined) {
-			if (typeof user !== 'string') {
-				throw new Error(`params.user is not a string.`);
-			}
+		if (typeof user !== 'string') {
+			throw new Error(`params.user is not a string.`);
 		}
 		// Get and validate the new password.
 		const newPassword = params.newPassword;

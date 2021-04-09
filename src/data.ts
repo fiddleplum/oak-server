@@ -105,7 +105,12 @@ export class Data {
 		}
 		// Delete it from the file system.
 		const filename = `${this._folder}/${path}.json`;
-		await FS.promises.unlink(filename);
+		try {
+			await FS.promises.unlink(filename);
+		}
+		catch {
+			throw new Error(`Could not delete ${path}.`);
+		}
 		// Go through any empty parent folders and delete them until the top.
 		let dir = Path.dirname(filename);
 		while (true) {
