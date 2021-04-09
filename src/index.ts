@@ -20,15 +20,6 @@ export class Server {
 		console.log('Starting up...');
 		console.log();
 
-		// // Get the config.
-		// const configFileData = fs.readFileSync(configFilePath);
-		// const config: Config = JSON.parse(configFileData.toString('utf-8'));
-
-		// // Print the config.
-		// console.log('The configuration is:');
-		// console.log(JSON.stringify(config));
-		// console.log();
-
 		// Startup the data object.
 		this._data = new Data(dataFolderPath);
 
