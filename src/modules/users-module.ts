@@ -45,8 +45,8 @@ export class UsersModule extends Module {
 		else if (command === 'changePasswordAdmin') {
 			return this.changePasswordAdmin(params, ws);
 		}
-		else if (command === 'listUsersAdmin') {
-			return this.listUsersAdmin(ws);
+		else if (command === 'listUsers') {
+			return this.listUsers();
 		}
 		else if (command === 'deleteUser') {
 			return this.deleteUser(params, ws);
@@ -178,11 +178,7 @@ export class UsersModule extends Module {
 	}
 
 	/** Lists the users. */
-	async listUsersAdmin(ws: WS): Promise<string[]> {
-		// Verify that the self is admin.
-		if (!(await this.getGroups(ws)).includes('admins')) {
-			throw new Error('You have insufficient permissions to change the password of a user.');
-		}
+	async listUsers(): Promise<string[]> {
 		return this.server.data.list(`users`);
 	}
 
