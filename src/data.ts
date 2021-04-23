@@ -19,6 +19,7 @@ export class Data {
 				const cache = entries[1];
 				// Delete any caches that haven't been used in the last minute.
 				if (now - cache.lastAccess > 60000) {
+					console.log(`Unloading from cache unused "${path}".`);
 					this._caches.delete(path);
 					continue;
 				}
