@@ -7,6 +7,7 @@ import { Data } from './data';
 import { Module } from './modules/module';
 import { UsersModule } from './modules/users-module';
 import { SunAlarmModule } from './modules/sun-alarm-module';
+import { CheckListModule } from './modules/check-list-module';
 
 export class Server {
 	constructor() {
@@ -26,6 +27,7 @@ export class Server {
 		// Setup the modules.
 		this._modules.set('users', new UsersModule(this));
 		this._modules.set('sun-alarm', new SunAlarmModule(this));
+		this._modules.set('check-list', new CheckListModule(this));
 
 		// Start the HTTPS and WebSocket servers.
 		const key  = fs.readFileSync('key.pem', 'utf8');
