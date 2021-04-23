@@ -3,11 +3,6 @@ import { JSONObject, JSONType } from 'pine-lib';
 import { Module } from './module';
 import { SunAlarm } from 'cedar-desk-types';
 
-/*
-When a WS connection is opened, it exists only in a single browser tab and browser session.
-This means that authentication is only required when the page is opened.
-*/
-
 /** The format of the data. Its keys are unique ids mapped to alarms. */
 type SunAlarmData = { [key: string]: SunAlarm | undefined };
 
