@@ -3,6 +3,7 @@ import * as Crypto from 'crypto';
 import { JSONObject, JSONType } from 'pine-lib';
 import { Module } from './module';
 import { Server } from '../index';
+import { RandomString } from 'random_string';
 
 /*
 When a WS connection is opened, it exists only in a single browser tab and browser session.
@@ -112,7 +113,7 @@ export class UsersModule extends Module {
 			throw new Error(`The user "${user}" already exists.`);
 		}
 		// Create the salt.
-		const salt = this._randomDigits(16);
+		const salt = RandomString.generate(16);
 		// Create the hash.
 		const hash = Crypto.createHmac('sha512', salt);
 		// Create the hashed password.
@@ -165,7 +166,7 @@ export class UsersModule extends Module {
 			throw new Error(`No user was found.`);
 		}
 		// Create the salt.
-		const salt = this._randomDigits(16);
+		const salt = RandomString.generate(16);
 		// Create the hash.
 		const hash = Crypto.createHmac('sha512', salt);
 		// Create the hashed new password.
@@ -261,7 +262,7 @@ export class UsersModule extends Module {
 			throw new Error(`Invalid old password.`);
 		}
 		// Create the salt.
-		const salt = this._randomDigits(16);
+		const salt = RandomString.generate(16);
 		// Create the hash.
 		const hash = Crypto.createHmac('sha512', salt);
 		// Create the hashed new password.
@@ -298,7 +299,7 @@ export class UsersModule extends Module {
 			throw new Error(`Invalid username or password.`);
 		}
 		// Create the session id.
-		const session = this._randomDigits(16);
+		const session = RandomString.generate(16);
 		userData.session = session;
 		await this.server.data.set(`users/${user}`, userData);
 		// Add it to the sessions arrays.
@@ -331,13 +332,6 @@ export class UsersModule extends Module {
 			throw new Error(`User not logged in`);
 		}
 		this._authenticatedSessions.set(ws, user);
-	}
-
-	/** Creates some cryptographically secure random digits of the given length. */
-	private _randomDigits(length: number): string {
-		return Crypto.randomBytes(Math.ceil(length / 2))
-			.toString('hex') // Convert to hexadecimal format.
-			.slice(0, length); // Return required number of characters.
 	}
 
 	/** The list of websocket connections and their respective users that have been authenticated. */
