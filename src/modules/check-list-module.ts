@@ -1,7 +1,7 @@
 import * as WS from 'ws';
 import { JSONObject, JSONType } from 'pine-lib';
 import { Module } from './module';
-import { CheckListListData, CheckListListItem } from 'cedar-desk-types';
+import { CheckListData, CheckListListData, CheckListListItem } from 'cedar-desk-types';
 import { RandomString } from 'random_string';
 
 /** The Sun Alarm module. */
@@ -17,9 +17,12 @@ export class CheckListModule extends Module {
 		else if (command === 'reinsertCheckList') {
 			return this._reinsertCheckList(ws, params);
 		}
-		// else if (command === 'getCheckList') {
-		// 	return this._get(ws, params);
-		// }
+		else if (command === 'getCheckList') {
+			return this._getCheckList(ws, params);
+		}
+		else if (command === 'removeCheckList') {
+			return this._removeCheckList(ws, params);
+		}
 		// else if (command === 'update') {
 		// 	return this._update(ws, params);
 		// }
@@ -146,119 +149,67 @@ export class CheckListModule extends Module {
 		await this.server.data.set(`check-list/${user}`, checkListListData);
 	}
 
-	// private async _list(ws: WS): Promise<CheckListData> {
-	// 	// Get the user.
-	// 	const user = this.server.users.getUser(ws);
-	// 	if (user === undefined) {
-	// 		throw new Error(`The user is not logged in.`);
-	// 	}
-	// 	const checkListData = await this.server.data.get(`check-list/${user}`) as CheckListData | undefined;
-	// 	if (checkListData === undefined) {
-	// 		return {};
-	// 	}
-	// 	else {
-	// 		return checkListData;
-	// 	}
-	// }
+	/** Gets a check list. */
+	private async _getCheckList(ws: WS, params: JSONObject): Promise<CheckListData | undefined> {
+		// Get the user.
+		const user = this.server.users.getUser(ws);
+		if (user === undefined) {
+			throw new Error(`The user is not logged in.`);
+		}
+		// Get the id.
+		const id = params.id;
+		if (typeof id !== 'string') {
+			throw new Error('params.id must be a string.');
+		}
+		// Get the check-list.
+		return await this.server.data.get(`check-list/lists/${id}`) as CheckListData | undefined;
+	}
 
-	// private async _get(ws: WS, params: JSONObject): Promise<CheckList> {
-	// 	// Get the user.
-	// 	const user = this.server.users.getUser(ws);
-	// 	if (user === undefined) {
-	// 		throw new Error('The user is not logged in.');
-	// 	}
-	// 	// Get the id.
-	// 	const id = params.id;
-	// 	if (typeof id !== 'string') {
-	// 		throw new Error('params.id must be a string.');
-	// 	}
-	// 	// Get the data.
-	// 	const checkListData = await this.server.data.get(`check-list/${user}`) as CheckListData | undefined;
-	// 	if (checkListData === undefined) {
-	// 		throw new Error(`No alarms found for user ${user}.`);
-	// 	}
-	// 	// Find the alarm.
-	// 	const checkList = checkListData[id];
-	// 	if (checkList === undefined) {
-	// 		throw new Error(`The alarm with id "${id}" was not found.`);
-	// 	}
-	// 	return checkList;
-	// }
+	/** Gets a check list. */
+	private async _removeCheckList(ws: WS, params: JSONObject): Promise<void> {
+		// Get the user.
+		const user = this.server.users.getUser(ws);
+		if (user === undefined) {
+			throw new Error(`The user is not logged in.`);
+		}
+		// Get the id.
+		const id = params.id;
+		if (typeof id !== 'string') {
+			throw new Error('params.id must be a string.');
+		}
+		// Get the check-list list.
+		const checkListListData = await this.server.data.get(`check-list/${user}`) as CheckListListData | undefined;
+		if (checkListListData === undefined) {
+			return;
+		}
+		// Remove it from the check-list list.
+		for (let i = 0; i < checkListListData.length; i++) {
+			if (checkListListData[i].id === id) {
+				checkListListData.splice(i, 1);
+				break;
+			}
+		}
+		// Save the check-list list.
+		await this.server.data.set(`check-list/${user}`, checkListListData);
+		// Get the check-list.
+		const checkListData = await this.server.data.get(`check-list/lists/${id}`) as CheckListData | undefined;
+		if (checkListData === undefined) {
+			return;
+		}
+		// Remove the user from the list of users.
+		for (let i = 0; i < checkListData.users.length; i++) {
+			if (checkListData.users[i] === user) {
+				checkListData.users.splice(i, 1);
+				break;
+			}
+		}
+		// If the user is the last shared user, remove it. Otherwise, save it.
+		if (checkListData.users.length === 0) {
+			await this.server.data.delete(`check-list/lists/${id}`);
+		}
+		else {
+			await this.server.data.set(`check-list/lists/${id}`, checkListData);
+		}
+	}
 
-	// private async _update(ws: WS, params: JSONObject): Promise<void> {
-	// 	// Get the user.
-	// 	const user = this.server.users.getUser(ws);
-	// 	if (user === undefined) {
-	// 		throw new Error(`The user is not logged in.`);
-	// 	}
-	// 	// Get the id.
-	// 	const id = params.id as string;
-	// 	delete params.id;
-	// 	// Get the data.
-	// 	let checkListData = await this.server.data.get(`check-list/${user}`) as CheckListData | undefined;
-	// 	if (checkListData === undefined) {
-	// 		checkListData = {};
-	// 	}
-	// 	checkListData[id] = params as CheckList;
-	// 	await this.server.data.set(`check-list/${user}`, checkListData);
-	// }
-
-	// private async _setEnabled(ws: WS, params: JSONObject): Promise<void> {
-	// 	// Get the user.
-	// 	const user = this.server.users.getUser(ws);
-	// 	if (user === undefined) {
-	// 		throw new Error('The user is not logged in.');
-	// 	}
-	// 	// Get the id.
-	// 	const id = params.id;
-	// 	if (typeof id !== 'string') {
-	// 		throw new Error('params.id must be a string.');
-	// 	}
-	// 	// Get the enabled param.
-	// 	const enabled = params.enabled;
-	// 	if (typeof enabled !== 'boolean') {
-	// 		throw new Error('params.enabled must be a boolean.');
-	// 	}
-	// 	// Get the data.
-	// 	const checkListData = await this.server.data.get(`check-list/${user}`) as CheckListData | undefined;
-	// 	if (checkListData === undefined) {
-	// 		throw new Error(`No alarms found for user ${user}.`);
-	// 	}
-	// 	// Find the alarm.
-	// 	const checkList = checkListData[id];
-	// 	if (checkList === undefined) {
-	// 		throw new Error(`The alarm with id "${id}" was not found.`);
-	// 	}
-	// 	// Set the enabled state.
-	// 	checkList.enabled = enabled;
-	// 	// Save the data.
-	// 	await this.server.data.set(`check-list/${user}`, checkListData);
-	// }
-
-	// private async _remove(ws: WS, params: JSONObject): Promise<void> {
-	// 	// Get the user.
-	// 	const user = this.server.users.getUser(ws);
-	// 	if (user === undefined) {
-	// 		throw new Error(`The user is not logged in.`);
-	// 	}
-	// 	// Get the id.
-	// 	const id = params.id;
-	// 	if (typeof id !== 'string') {
-	// 		throw new Error('params.id must be a string.');
-	// 	}
-	// 	// Get the data.
-	// 	const checkListData = await this.server.data.get(`check-list/${user}`) as CheckListData | undefined;
-	// 	if (checkListData === undefined) {
-	// 		throw new Error(`No alarms found for user ${user}.`);
-	// 	}
-	// 	// Find the alarm.
-	// 	const checkList = checkListData[id];
-	// 	if (checkList === undefined) {
-	// 		throw new Error(`The alarm with id "${id}" was not found.`);
-	// 	}
-	// 	// Delete the alarm.
-	// 	delete checkListData[id];
-	// 	// Save the data.
-	// 	await this.server.data.set(`check-list/${user}`, checkListData);
-	// }
 }
