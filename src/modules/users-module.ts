@@ -70,12 +70,21 @@ export class UsersModule extends Module {
 
 	/** Removes the web socket form all session types. */
 	disconnect(ws: WS): void {
-		this._authenticatedSessions.delete(ws);
+		const user = this._authenticatedSessions.get(ws);
+		if (user !== undefined) {
+			this._usersToWebSockets.delete(user);
+			this._authenticatedSessions.delete(ws);
+		}
 	}
 
 	/** Gets the user, if authenticated from the web socket. */
 	getUser(ws: WS): string | undefined {
 		return this._authenticatedSessions.get(ws);
+	}
+
+	/** Gets the websocket of a user. */
+	getWS(user: string): WS | undefined {
+		return this._usersToWebSockets.get(user);
 	}
 
 	/** Creates a user with admin permissions. */
@@ -300,6 +309,7 @@ export class UsersModule extends Module {
 		await this.server.data.set(`users/${user}`, userData);
 		// Add it to the sessions arrays.
 		this._authenticatedSessions.set(ws, user);
+		this._usersToWebSockets.set(user, ws);
 		// Return the session id.
 		return session;
 	}
@@ -325,11 +335,16 @@ export class UsersModule extends Module {
 		if (session !== userData.session) {
 			// They didn't match, so remove it to the unauthenticated sessions.
 			this._authenticatedSessions.delete(ws);
+			this._usersToWebSockets.delete(user);
 			throw new Error(`User not logged in`);
 		}
 		this._authenticatedSessions.set(ws, user);
+		this._usersToWebSockets.set(user, ws);
 	}
 
 	/** The list of websocket connections and their respective users that have been authenticated. */
 	private _authenticatedSessions: Map<WS, string> = new Map();
+
+	/** A reverse mapping of the authenticated sessions. */
+	private _usersToWebSockets: Map<string, WS> = new Map();
 }
