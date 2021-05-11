@@ -41,10 +41,15 @@ export class CheckListModule extends Module {
 		else if (command === 'reinsertItem') {
 			return this.reinsertItem(ws, params);
 		}
+		else if (command === 'onCheckList') {
+			return this.onCheckList(ws, params);
+		}
+		else if (command === 'offCheckList') {
+			return this.offCheckList(ws, params);
+		}
 		else {
 			throw new Error('Invalid command.');
 		}
-		return Promise.resolve();
 	}
 
 	private async listCheckLists(ws: WS): Promise<CheckListListData> {
@@ -359,6 +364,14 @@ export class CheckListModule extends Module {
 		else {
 			checkListData.items.push(newItem);
 		}
+		// Send a message out to other active users.
+		this.sendMessageToActiveWebSockets(ws, checkListId, {
+			command: 'addItem',
+			id: id,
+			level: level,
+			beforeId: beforeId,
+			text: text
+		});
 		// Save the check-list.
 		await this.saveCheckList(checkListId, checkListData);
 		// Return the id.
@@ -390,6 +403,11 @@ export class CheckListModule extends Module {
 			throw new Error(`Item with id ${id} not found.`);
 		}
 		checkListData.items.splice(index, 1);
+		// Send a message out to other active users.
+		this.sendMessageToActiveWebSockets(ws, checkListId, {
+			command: 'removeItem',
+			id: id
+		});
 		// Save the check-list.
 		await this.saveCheckList(checkListId, checkListData);
 	}
@@ -424,6 +442,12 @@ export class CheckListModule extends Module {
 			throw new Error(`Item with id ${id} not found.`);
 		}
 		checkListData.items[index].text = text;
+		// Send a message out to other active users.
+		this.sendMessageToActiveWebSockets(ws, checkListId, {
+			command: 'updateText',
+			id: id,
+			text: text
+		});
 		// Save the check-list.
 		await this.saveCheckList(checkListId, checkListData);
 	}
@@ -458,15 +482,22 @@ export class CheckListModule extends Module {
 			throw new Error(`Item with id ${id} not found.`);
 		}
 		const item = checkListData.items[index];
+		const items: [string, number][] = [[id, level]];
 		// Update the level of all children.
 		for (let j = index + 1; j < checkListData.items.length; j++) {
 			if (checkListData.items[j].level <= item.level) {
 				break;
 			}
 			checkListData.items[j].level += level - item.level;
+			items.push([checkListData.items[j].id, checkListData.items[j].level]);
 		}
 		// Update the level.
 		item.level = level;
+		// Send a message out to other active users.
+		this.sendMessageToActiveWebSockets(ws, checkListId, {
+			command: 'updateLevels',
+			items: items
+		});
 		// Save the check-list.
 		await this.saveCheckList(checkListId, checkListData);
 	}
@@ -503,11 +534,13 @@ export class CheckListModule extends Module {
 		const item = checkListData.items[index];
 		// Get the list of the item and its children.
 		const items = [item];
+		const ids: string[] = [item.id];
 		for (let j = index + 1; j < checkListData.items.length; j++) {
 			if (checkListData.items[j].level <= item.level) {
 				break;
 			}
 			items.push(checkListData.items[j]);
+			ids.push(checkListData.items[j].id);
 		}
 		// Remove the item and its children.
 		checkListData.items.splice(index, items.length);
@@ -521,6 +554,12 @@ export class CheckListModule extends Module {
 			// No before-item, so just add the items to the end.
 			checkListData.items.push(...items);
 		}
+		// Send a message out to other active users.
+		this.sendMessageToActiveWebSockets(ws, checkListId, {
+			command: 'reinsertItems',
+			ids: ids,
+			beforeId: beforeId
+		});
 		// Save the check-list.
 		await this.saveCheckList(checkListId, checkListData);
 	}
@@ -551,4 +590,75 @@ export class CheckListModule extends Module {
 		}
 		return undefined;
 	}
+
+	/** Sets a user as active on a check-list. */
+	private async onCheckList(ws: WS, params: JSONObject): Promise<void> {
+		// Get the user.
+		const user = this.server.users.getUser(ws);
+		if (user === undefined) {
+			throw new Error(`The user is not logged in.`);
+		}
+		// Get the check-list id.
+		const checkListId = params.checkListId;
+		if (typeof checkListId !== 'string') {
+			throw new Error('params.checkListId must be a string.');
+		}
+		// Add the user to the check-list.
+		let activeWebSockets = this.checkListActiveWebSockets.get(checkListId);
+		if (activeWebSockets === undefined) {
+			activeWebSockets = new Set();
+			this.checkListActiveWebSockets.set(checkListId, activeWebSockets);
+		}
+		activeWebSockets.add(ws);
+	}
+
+	/** Sets a user as not active on a check-list. */
+	private async offCheckList(ws: WS, params: JSONObject): Promise<void> {
+		// Get the user.
+		const user = this.server.users.getUser(ws);
+		if (user === undefined) {
+			throw new Error(`The user is not logged in.`);
+		}
+		// Get the check-list id.
+		const checkListId = params.checkListId;
+		if (typeof checkListId !== 'string') {
+			throw new Error('params.checkListId must be a string.');
+		}
+		// Add the user to the check-list.
+		const activeWebSockets = this.checkListActiveWebSockets.get(checkListId);
+		if (activeWebSockets !== undefined) {
+			activeWebSockets.delete(ws);
+			if (activeWebSockets.size === 0) {
+				this.checkListActiveWebSockets.delete(checkListId);
+			}
+		}
+	}
+
+	private sendMessageToActiveWebSockets(ws: WS, checkListId: string, message: JSONObject): void {
+		// Send a message out to other active users.
+		const activeWebSockets = this.checkListActiveWebSockets.get(checkListId);
+		if (activeWebSockets !== undefined) {
+			const inactiveWebSockets: Set<WS> = new Set();
+			for (const activeWebSocket of activeWebSockets) {
+				// Don't send to self.
+				if (activeWebSocket === ws) {
+					continue;
+				}
+				if (ws.readyState !== WS.OPEN) {
+					inactiveWebSockets.add(activeWebSocket);
+					continue;
+				}
+				this.server.sendMessage(activeWebSocket, 'check-list', message);
+			}
+			for (const inactiveWebSocket of inactiveWebSockets) {
+				activeWebSockets.delete(inactiveWebSocket);
+				if (activeWebSockets.size === 0) {
+					this.checkListActiveWebSockets.delete(checkListId);
+				}
+			}
+		}
+	}
+
+	/** The set of users active on each check-list. */
+	private checkListActiveWebSockets: Map<string, Set<WS>> = new Map();
 }

@@ -138,53 +138,7 @@ export class Server {
 
 			// Process the command.
 			const response = await module.process(command, params, ws);
-			this.sendResponse(response, ws, id);
-
-			// // Process the different commands.
-			// if (command === 'getGroups') { // The the groups of the current user.
-			// 	const groups = await this._groups.getGroups(user);
-			// 	this.sendResponse({
-			// 		success: true,
-			// 		data: groups
-			// 	}, id, ws);
-			// }
-			// else if (command === 'get') {
-			// 	const dataRecord = await this._data.get(data);
-			// 	this.sendResponse({
-			// 		success: true,
-			// 		data: dataRecord
-			// 	}, id, ws);
-			// }
-			// else if (command === 'list') {
-			// 	const dataRecords = await this._data.list(data);
-			// 	this.sendResponse({
-			// 		success: true,
-			// 		data: dataRecords
-			// 	}, id, ws);
-			// }
-			// else if (command === 'set') {
-			// 	await this._data.set(data);
-			// 	this.sendResponse({
-			// 		success: true
-			// 	}, id, ws);
-			// }
-			// else if (command === 'delete') {
-			// 	await this._data.delete(data);
-			// 	this.sendResponse({
-			// 		success: true
-			// 	}, id, ws);
-			// }
-			// else if (command === 'has') {
-			// 	// data.has();
-			// 	// success = true;
-			// }
-			// else if (command === 'size') {
-			// 	// data.size();
-			// 	// success = true;
-			// }
-			// else {
-			// 	throw new Error('Invalid command "' + command + '".');
-			// }
+			this.sendResponse(ws, id, response);
 		}
 		catch (error) {
 			ws.send(JSON.stringify({
@@ -196,8 +150,16 @@ export class Server {
 		}
 	}
 
+	/** Send a message. */
+	sendMessage(ws: WS, module: string, data: JSONType | void): void {
+		ws.send(JSON.stringify({
+			module,
+			data
+		}));
+	}
+
 	/** Send a response. */
-	sendResponse(data: JSONType | void, ws: WS, id: number): void {
+	sendResponse(ws: WS, id: number, data: JSONType | void): void {
 		ws.send(JSON.stringify({
 			id,
 			success: true,
