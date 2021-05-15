@@ -91,12 +91,15 @@ export class UsersModule extends Module {
 	async createUserAdmin(params: JSONObject, ws: WS): Promise<void> {
 		// Verify that the self is admin.
 		if (!(await this.getGroups(ws)).includes('admins')) {
-			throw new Error('You have insufficient permissions to create a user.');
+			throw new Error(`You have insufficient permissions to create a user.`);
 		}
 		// Get and validate the user.
 		const user = params.user;
 		if (typeof user !== 'string') {
 			throw new Error(`params.user is not a string.`);
+		}
+		if (user === '') {
+			throw new Error(`The user field is empty.`);
 		}
 		// Get and validate the password.
 		const password = params.password;
@@ -139,12 +142,18 @@ export class UsersModule extends Module {
 	async deleteUserAdmin(params: JSONObject, ws: WS): Promise<void> {
 		// Verify that the self is admin.
 		if (!(await this.getGroups(ws)).includes('admins')) {
-			throw new Error('You have insufficient permissions to delete a user.');
+			throw new Error(`You have insufficient permissions to delete a user.`);
 		}
 		// Get and validate the user.
 		const user = params.user;
 		if (typeof user !== 'string') {
 			throw new Error(`params.user is not a string.`);
+		}
+		if (user === '') {
+			throw new Error(`The user field is empty.`);
+		}
+		if (!await this.server.data.has(`users/${user}`)) {
+			throw new Error(`The user is not found`);
 		}
 		// Delete the user.
 		await this.server.data.delete(`users/${user}`);
@@ -154,20 +163,23 @@ export class UsersModule extends Module {
 	async changePasswordAdmin(params: JSONObject, ws: WS): Promise<void> {
 		// Verify that the self is admin.
 		if (!(await this.getGroups(ws)).includes('admins')) {
-			throw new Error('You have insufficient permissions to change the password of a user.');
+			throw new Error(`You have insufficient permissions to change the password of a user.`);
 		}
 		// Get and validate the user.
 		const user = params.user;
 		if (typeof user !== 'string') {
 			throw new Error(`params.user is not a string.`);
 		}
-		// Get and validate the new password.
-		const password = params.password;
-		if (typeof password !== 'string') {
-			throw new Error(`params.password is not a string`);
+		if (user === '' || !await this.server.data.has(`users/${user}`)) {
+			throw new Error(`The user is not found`);
 		}
-		if (password.length < 8) {
-			throw new Error(`The password must be at least 8 characters.`);
+		// Get and validate the new password.
+		const newPassword = params.newPassword;
+		if (typeof newPassword !== 'string') {
+			throw new Error(`params.newPassword is not a string`);
+		}
+		if (newPassword.length < 8) {
+			throw new Error(`The new password must be at least 8 characters.`);
 		}
 		// Get the data record.
 		const userData = await this.server.data.get(`users/${user}`) as UserData | undefined;
@@ -179,7 +191,7 @@ export class UsersModule extends Module {
 		// Create the hash.
 		const hash = Crypto.createHmac('sha512', salt);
 		// Create the hashed new password.
-		const newPasswordHash = hash.update(password).digest('hex');
+		const newPasswordHash = hash.update(newPassword).digest('hex');
 		// Update the data.
 		userData.salt = salt;
 		userData.passwordHash = newPasswordHash;
@@ -285,6 +297,9 @@ export class UsersModule extends Module {
 		if (typeof user !== 'string') {
 			throw new Error(`params.user is not a string`);
 		}
+		if (user === '') {
+			throw new Error(`Invalid username or password.`);
+		}
 		// Get and validate the password.
 		const password = params.password;
 		if (typeof password !== 'string') {
@@ -321,6 +336,9 @@ export class UsersModule extends Module {
 		if (typeof user !== 'string') {
 			throw new Error(`params.user is not a string.`);
 		}
+		if (user === '') {
+			throw new Error(`The user is not logged in.`);
+		}
 		// Get and validate the session.
 		const session = params.session;
 		if (typeof session !== 'string') {
@@ -329,7 +347,7 @@ export class UsersModule extends Module {
 		// If not, get the data record.
 		const userData = await this.server.data.get(`users/${user}`) as UserData | undefined;
 		if (userData === undefined) {
-			throw new Error(`User not logged in`);
+			throw new Error(`The user is not logged in.`);
 		}
 		// Check if it is a valid session.
 		if (session !== userData.session) {

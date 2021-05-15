@@ -144,9 +144,9 @@ export class Server {
 			ws.send(JSON.stringify({
 				id: typeof id === 'number' ? id : NaN,
 				success: false,
-				error: error + ''
+				error: error.message
 			}));
-			console.log(error + '');
+			console.log(error.message);
 		}
 	}
 
