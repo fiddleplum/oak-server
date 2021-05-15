@@ -162,12 +162,12 @@ export class UsersModule extends Module {
 			throw new Error(`params.user is not a string.`);
 		}
 		// Get and validate the new password.
-		const newPassword = params.newPassword;
-		if (typeof newPassword !== 'string') {
-			throw new Error(`params.newPassword is not a string`);
+		const password = params.password;
+		if (typeof password !== 'string') {
+			throw new Error(`params.password is not a string`);
 		}
-		if (newPassword.length < 8) {
-			throw new Error(`The new password must be at least 8 characters.`);
+		if (password.length < 8) {
+			throw new Error(`The password must be at least 8 characters.`);
 		}
 		// Get the data record.
 		const userData = await this.server.data.get(`users/${user}`) as UserData | undefined;
@@ -179,7 +179,7 @@ export class UsersModule extends Module {
 		// Create the hash.
 		const hash = Crypto.createHmac('sha512', salt);
 		// Create the hashed new password.
-		const newPasswordHash = hash.update(newPassword).digest('hex');
+		const newPasswordHash = hash.update(password).digest('hex');
 		// Update the data.
 		userData.salt = salt;
 		userData.passwordHash = newPasswordHash;
