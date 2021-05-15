@@ -68,6 +68,12 @@ export class Data {
 		return paths;
 	}
 
+	/** Returns true if the path exists. */
+	async has(path: string): Promise<boolean> {
+		return this._caches.has(path)
+			|| await FS.promises.access(`${this._folder}/${path}`, FS.constants.F_OK).then(() => true).catch(() => false);
+	}
+
 	/** Sets data to a path. */
 	async set(path: string, data: JSONType): Promise<void> {
 		// Clean the path.
