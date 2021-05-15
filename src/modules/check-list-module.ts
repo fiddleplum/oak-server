@@ -32,6 +32,9 @@ export class CheckListModule extends Module {
 		else if (command === 'removeItem') {
 			return this.removeItem(ws, params);
 		}
+		else if (command === 'updateChecked') {
+			return this.updateChecked(ws, params);
+		}
 		else if (command === 'updateText') {
 			return this.updateText(ws, params);
 		}
@@ -80,6 +83,11 @@ export class CheckListModule extends Module {
 		if (typeof title !== 'string') {
 			throw new Error('params.title must be a string.');
 		}
+		// Get the remove-on-check flag.
+		const removeOnCheck = params.removeOnCheck;
+		if (typeof removeOnCheck !== 'boolean') {
+			throw new Error('params.removeOnCheck must be a boolean.');
+		}
 		// Get the shared users.
 		const users = params.users;
 		if (!Array.isArray(users)) {
@@ -100,6 +108,7 @@ export class CheckListModule extends Module {
 		await this.server.data.set(`check-list/lists/${id}`, {
 			id: id,
 			title: title,
+			removeOnCheck: removeOnCheck,
 			users: users,
 			items: []
 		});
@@ -136,6 +145,11 @@ export class CheckListModule extends Module {
 		if (typeof title !== 'string') {
 			throw new Error('params.title must be a string.');
 		}
+		// Get the remove-on-check flag.
+		const removeOnCheck = params.removeOnCheck;
+		if (typeof removeOnCheck !== 'boolean') {
+			throw new Error('params.removeOnCheck must be a boolean.');
+		}
 		// Get the shared users.
 		const users = params.users;
 		if (!Array.isArray(users)) {
@@ -157,6 +171,7 @@ export class CheckListModule extends Module {
 		}
 		// Update the fields.
 		checkListData.title = title;
+		checkListData.removeOnCheck = removeOnCheck;
 		const oldUsers = checkListData.users;
 		checkListData.users = users as string[];
 		// Save the check list.
@@ -331,15 +346,15 @@ export class CheckListModule extends Module {
 		if (typeof checkListId !== 'string') {
 			throw new Error('params.checkListId must be a string.');
 		}
-		// Get the level.
-		const level = params.level;
-		if (typeof level !== 'number') {
-			throw new Error('params.level must be a number.');
-		}
 		// Get the new text.
 		const text = params.text;
 		if (typeof text !== 'string') {
 			throw new Error('params.text must be a string.');
+		}
+		// Get the level.
+		const level = params.level;
+		if (typeof level !== 'number') {
+			throw new Error('params.level must be a number.');
 		}
 		// Get the id of the item before this one.
 		const beforeId = params.beforeId;
@@ -353,8 +368,9 @@ export class CheckListModule extends Module {
 		// Create the new item.
 		const newItem = {
 			id: id,
-			level: level,
-			text: text
+			checked: false,
+			text: text,
+			level: level
 		};
 		// Add the new item to the right location.
 		const beforeIndex = this.getIndexFromId(beforeId, checkListData);
@@ -407,6 +423,69 @@ export class CheckListModule extends Module {
 		this.sendMessageToActiveWebSockets(ws, checkListId, {
 			command: 'removeItem',
 			id: id
+		});
+		// Save the check-list.
+		await this.saveCheckList(checkListId, checkListData);
+	}
+
+	/** Updates a check-list item text. */
+	private async updateChecked(ws: WS, params: JSONObject): Promise<void> {
+		// Get the user.
+		const user = this.server.users.getUser(ws);
+		if (user === undefined) {
+			throw new Error(`The user is not logged in.`);
+		}
+		// Get the check-list id.
+		const checkListId = params.checkListId;
+		if (typeof checkListId !== 'string') {
+			throw new Error('params.checkListId must be a string.');
+		}
+		// Get the id.
+		const id = params.id;
+		if (typeof id !== 'string') {
+			throw new Error('params.id must be a string.');
+		}
+		// Get the new checked status.
+		const checked = params.checked;
+		if (typeof checked !== 'boolean') {
+			throw new Error('params.checked must be a boolean.');
+		}
+		// Load the check-list.
+		const checkListData = await this.getCheckListFromId(checkListId);
+		// Get the index of the item.
+		const index = this.getIndexFromId(id, checkListData);
+		if (index === undefined) {
+			throw new Error(`Item with id ${id} not found.`);
+		}
+		const item = checkListData.items[index];
+		// If the list is set to remove the item on checked and it is check, remove the item and its children.
+		if (checkListData.removeOnCheck && checked) {
+			// Get the number of children.
+			let count = 1;
+			for (let j = index + 1; j < checkListData.items.length; j++) {
+				if (checkListData.items[j].level <= item.level) {
+					break;
+				}
+				count += 1;
+			}
+			checkListData.items.splice(index, count);
+		}
+		else {
+			// Update the checked status of the item.
+			checkListData.items[index].checked = checked;
+			// Update the checked status of any children to be the same.
+			for (let j = index + 1; j < checkListData.items.length; j++) {
+				if (checkListData.items[j].level <= item.level) {
+					break;
+				}
+				checkListData.items[j].checked = checked;
+			}
+		}
+		// Send a message out to other active users.
+		this.sendMessageToActiveWebSockets(ws, checkListId, {
+			command: 'updateChecked',
+			id: id,
+			checked: checked
 		});
 		// Save the check-list.
 		await this.saveCheckList(checkListId, checkListData);
