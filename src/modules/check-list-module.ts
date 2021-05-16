@@ -83,6 +83,9 @@ export class CheckListModule extends Module {
 		if (typeof title !== 'string') {
 			throw new Error('params.title must be a string.');
 		}
+		if (title === '') {
+			throw new Error('Title may not be empty.');
+		}
 		// Get the remove-on-check flag.
 		const removeOnCheck = params.removeOnCheck;
 		if (typeof removeOnCheck !== 'boolean') {
