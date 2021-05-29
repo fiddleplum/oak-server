@@ -57,6 +57,9 @@ export class UsersModule extends Module {
 		else if (command === 'login') {
 			return this.login(params, ws);
 		}
+		else if (command === 'logout') {
+			return this.logout(ws);
+		}
 		else if (command === 'authenticate') {
 			return this.authenticate(params, ws);
 		}
@@ -72,8 +75,14 @@ export class UsersModule extends Module {
 	disconnect(ws: WS): void {
 		const user = this._authenticatedSessions.get(ws);
 		if (user !== undefined) {
-			this._usersToWebSockets.delete(user);
 			this._authenticatedSessions.delete(ws);
+			const userWebSockets = this._usersToWebSockets.get(user);
+			if (userWebSockets !== undefined) {
+				userWebSockets.delete(ws);
+				if (userWebSockets.size === 0) {
+					this._usersToWebSockets.delete(user);
+				}
+			}
 		}
 	}
 
@@ -82,8 +91,8 @@ export class UsersModule extends Module {
 		return this._authenticatedSessions.get(ws);
 	}
 
-	/** Gets the websocket of a user. */
-	getWS(user: string): WS | undefined {
+	/** Gets the websockets of a user. */
+	getWS(user: string): Set<WS> | undefined {
 		return this._usersToWebSockets.get(user);
 	}
 
@@ -318,15 +327,51 @@ export class UsersModule extends Module {
 		if (passwordHash !== userData.passwordHash && (password !== '' || userData.passwordHash !== '')) {
 			throw new Error(`Invalid username or password.`);
 		}
-		// Create the session id.
-		const session = RandomString.generate(16);
-		userData.session = session;
-		await this.server.data.set(`users/${user}`, userData);
+		// Get the session id.
+		let session = userData.session;
+		// If there isn't any session id (the user wasn't logged in anywhere else),
+		if (session === '') {
+			// Create the session id.
+			session = RandomString.generate(16);
+			userData.session = session;
+			await this.server.data.set(`users/${user}`, userData);
+		}
 		// Add it to the sessions arrays.
 		this._authenticatedSessions.set(ws, user);
-		this._usersToWebSockets.set(user, ws);
+		const userWebSockets = this._usersToWebSockets.get(user);
+		if (userWebSockets === undefined) {
+			this._usersToWebSockets.set(user, new Set([ws]));
+		}
+		else {
+			userWebSockets.add(ws);
+		}
 		// Return the session id.
 		return session;
+	}
+
+	/** Logs the user out. */
+	async logout(ws: WS): Promise<void> {
+		// Get and validate the user.
+		const user = this.getUser(ws);
+		if (user !== undefined) {
+			// Delete all references to the user in the authentication arrays.
+			this._usersToWebSockets.delete(user);
+			for (const authenticatedSessionEntry of this._authenticatedSessions) {
+				if (authenticatedSessionEntry[1] === user) {
+					const otherWS = authenticatedSessionEntry[0];
+					this.server.sendMessage(otherWS, 'users', {
+						command: 'logout'
+					});
+					this._authenticatedSessions.delete(otherWS);
+				}
+			}
+			// If not, get the data record.
+			const userData = await this.server.data.get(`users/${user}`) as UserData | undefined;
+			if (userData !== undefined) {
+				userData.session = '';
+				await this.server.data.set(`users/${user}`, userData);
+			}
+		}
 	}
 
 	/** Authenticates a web socket from a username and session token. */
@@ -353,16 +398,29 @@ export class UsersModule extends Module {
 		if (session !== userData.session) {
 			// They didn't match, so remove it to the unauthenticated sessions.
 			this._authenticatedSessions.delete(ws);
-			this._usersToWebSockets.delete(user);
+			const userWebSockets = this._usersToWebSockets.get(user);
+			if (userWebSockets !== undefined) {
+				userWebSockets.delete(ws);
+				if (userWebSockets.size === 0) {
+					this._usersToWebSockets.delete(user);
+				}
+			}
 			throw new Error(`User not logged in`);
 		}
+		// Add it to the sessions arrays.
 		this._authenticatedSessions.set(ws, user);
-		this._usersToWebSockets.set(user, ws);
+		const userWebSockets = this._usersToWebSockets.get(user);
+		if (userWebSockets === undefined) {
+			this._usersToWebSockets.set(user, new Set([ws]));
+		}
+		else {
+			userWebSockets.add(ws);
+		}
 	}
 
 	/** The list of websocket connections and their respective users that have been authenticated. */
 	private _authenticatedSessions: Map<WS, string> = new Map();
 
 	/** A reverse mapping of the authenticated sessions. */
-	private _usersToWebSockets: Map<string, WS> = new Map();
+	private _usersToWebSockets: Map<string, Set<WS>> = new Map();
 }
